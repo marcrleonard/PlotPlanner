@@ -1,0 +1,7 @@
+svg {
+    width: 70%;
+    height: auto;
+}
+svg:hover polyline {
+    stroke: red;
+}
