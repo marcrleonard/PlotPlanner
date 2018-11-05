@@ -6,13 +6,16 @@
     <title>External SVG + D3</title>
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script type="text/javascript" src='js/scripts.js'></script>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+        crossorigin="anonymous"></script>
 </head>
 
 
 <body>
 
 
-    <button onclick='saveButton()' id='saveButton'> SAVE IT!!! </button>
+    <button id='save' onclick="exportFile('This is some dummy data.\nAnd some more dummy data.\n', 'a_btn_writetofile')">
+        SAVE IT!!! </button>
 
     <a id='link'> Link!</a>
 
@@ -40,6 +43,11 @@
                             <path d="m 0,0 -1.553,0 -2.934,-0.69 -1.38,-0.863 -0.518,-0.863 0.345,-1.725 1.726,-1.726 3.796,-2.588 3.279,-1.726 7.938,-3.106 2.761,-0.345 2.761,0.517 1.726,0.863 1.38,1.208 1.208,1.726 0.863,1.725 0.172,1.726 -0.172,0.863 -1.726,1.725 -2.071,0.863 -3.969,0.863 L 1.726,0 0,0"
                                 style="fill:none;stroke:#231f20;stroke-width:0.23999999;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
                                 id="path6416" inkscape:connector-curvature="0" />
+
+                            <!-- ADDED THIS -->
+                            <path d="m 0,0 -4.659,-0.173 -3.624,-0.862 -2.589,-1.036 -1.898,-1.208 -1.208,-1.725 -1.725,-4.66 -1.381,-8.628 -0.863,-10.526 0.173,-8.628 1.035,-5.349 4.487,-8.628 0.69,-2.761 1.553,-7.765 0.691,-1.726 0.862,-1.035 1.899,-1.036 5.867,-1.898 4.141,-0.517 16.567,1.38 4.486,1.035 8.801,2.934 2.071,0.172 2.07,-0.517 2.762,-2.071 4.831,-6.212 5.867,-6.73 10.354,-12.597 8.111,-8.801 3.624,-3.451 3.969,-2.416 12.079,-5.004 9.836,-5.004 3.797,-1.035 3.451,0.345 9.664,3.623 10.353,2.244 16.394,5.867 6.385,3.278 2.588,2.071 2.589,2.934 5.004,6.212 3.451,5.694 23.124,44.348 2.244,5.867 1.553,6.04 0.172,1.726 -0.345,1.725 -1.035,2.244 -1.726,1.725 -2.761,1.036 -2.934,0.172 -6.73,-0.345 -8.973,-1.035 -15.358,-3.106 -8.974,-0.863 -8.283,-1.208 -4.314,0 -9.663,1.208 -8.974,0.517 -25.712,3.107 -11.044,2.76 -10.354,2.934 -20.19,3.624 -5.522,2.243 -11.216,6.385 -5.522,1.898 -3.452,0.863 L 4.832,0.345 0,0"
+                                style="fill:none;stroke:#231f20;stroke-width:0.23999999;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+                                id="path6428_yo" inkscape:connector-curvature="0" />
                         </g>
                     </g>
                 </g>
@@ -162,7 +170,7 @@
             xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
             version="1.1" inkscape:version="0.91 r13725" xml:space="preserve" width="419.99957mm" height="297.00009mm"
             viewBox="0 0 1488.1875 1052.3625" sodipodi:docname="Poster_v3_A3_Landscape_trimmed_v2_is.svg">
-            <metadata id="metadata5434">
+            <metadata id="metadata54341">
                 <rdf:RDF>
                     <cc:Work rdf:about="">
                         <dc:format>image/svg+xml</dc:format>
@@ -174,17 +182,33 @@
         </svg>
     </div>
 
-    <div>
-        <svg>
-            <use href='#shadow_svg'></use>
-        </svg>
-    </div>
-
-
 
 
 
     <script>
+
+
+        // URL pointing to the Blob with the file contents
+        var objUrl = null;
+        // create the blob with file content, and attach the URL to the downloadlink; 
+        // NB: link must have the download attribute
+        // this method can go to your library
+        function exportFile(fileContent, downloadLinkId) {
+            // revoke the old object URL to avoid memory leaks.
+            if (objUrl !== null) {
+                window.URL.revokeObjectURL(objUrl);
+            }
+            // create the object that contains the file data and that can be referred to with a URL
+            var data = new Blob([fileContent], { type: 'text/plain' });
+            objUrl = window.URL.createObjectURL(data);
+            // attach the object to the download link (styled as button)
+            var downloadLinkButton = document.getElementById(downloadLinkId);
+            downloadLinkButton.href = objUrl;
+        };
+
+
+
+
 
         var shadow_svg = [];
 
@@ -200,9 +224,36 @@
         // });
         function clicker(obj) {
             if (!shadow_svg.includes(obj.id)) {
-                shadow_svg.push(obj.id);
+
+                let tag_type = obj.tagName
+                let full_obj = obj;
+                let curr_obj = obj
+                while (tag_type != 'svg') {
+
+                    // $(this).siblings().remove();
+
+                    // itterate up...
+                    curr_obj = full_obj;
+                    full_obj = full_obj.parentElement;
+                    tag_type = full_obj.tagName;
+                }
+
+
+                let clone = curr_obj.cloneNode(true)
+
+                let _ele = clone.querySelector('#' + obj.id)
+
+                // let _ele = clone.getElementById(obj.id)
+                $(_ele).siblings().remove();
+
+                clone.style.stroke = 'black';
+
+                shadow_svg.push(clone);
                 obj.style.stroke = 'green';
                 obj.style.strokeWidth = '2';
+
+
+
 
 
             }
@@ -229,7 +280,7 @@
 
 
             for (path of shadow_svg) {
-                o_path = document.getElementById(path);
+                // o_path = document.getElementById(path);
                 // var n_path = o_path.cloneNode(true);
                 // n_path.id = 'new!';
                 // d = o_path.getAttribute('d');
@@ -240,12 +291,12 @@
                 // newElement.style.strokeWidth = "1px"; //Set stroke width
 
                 // console.log(n_path);
-                clone = o_path.cloneNode(false); // true means clone all childNodes and all event handlers
+                // clone = path.cloneNode(true); // true means clone all childNodes and all event handlers
                 // clone.attr('xmlns:myns', ns_string);
-                clone.id = "clone_" + o_path.id;
+                // clone.id = "clone_" + o_path.id;
 
 
-                g.appendChild(clone);
+                g.appendChild(path);
 
             };
 
