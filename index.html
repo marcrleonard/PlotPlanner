@@ -212,11 +212,35 @@
 
         var shadow_svg = [];
 
+        let supported_elements = ['path', 'circle', 'rect', 'line']
 
-        paths = d3.selectAll('path');
-        paths.attr("onclick", "clicker(this)");
 
-        console.log(paths);
+
+
+        // def recursivelyTraverseSvg(self, aNodeList,
+        //                            matCurrent=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        //                            parent_visibility='visible'):
+        //     """
+        //     Recursively traverse the svg file to plot out all of the
+        //     paths.  The function keeps track of the composite transformation
+        //     that should be applied to each path.
+
+        //     This function handles path, group, line, rect, polyline, polygon,
+        //     circle, ellipse and use (clone) elements.  Notable elements not
+        //     handled include text.  Unhandled elements should be converted to
+        //     paths in Inkscape.
+
+
+
+        for (let ele of supported_elements) {
+            paths = d3.selectAll(ele);
+            paths.attr("onclick", "clicker(this)");
+            console.log(paths);
+
+        }
+
+
+
         // inside of our d3.xml callback, call another function
         // that styles individual paths inside of our imported svg
         styleImportedSVG();
