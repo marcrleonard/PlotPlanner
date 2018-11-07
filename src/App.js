@@ -10,6 +10,7 @@ class App extends Component {
     super(props)
     this.state = {
       image: ''
+      // image: '~/Users/marcleonard/Desktop/Poster_v3_A3.svg'
     }
 
     // why the hell is this needed??!?
@@ -18,7 +19,7 @@ class App extends Component {
   }
 
   setImage(imagePath) {
-    console.log("Setting!! " + imagePath)
+    console.log("Settin g!! " + imagePath)
     this.setState({ image: imagePath })
   }
 

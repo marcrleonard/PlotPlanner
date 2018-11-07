@@ -9,9 +9,19 @@
   background-color: gainsboro
 }
 
+.canvasInfo{
+  display: flex;
+  /* width:100%; */
+  background-color: grey;
+  padding:10px;
+}
+.canvasSubInfo{
+  padding: 5px
+}
+
 .rightNav{
-  
   width:200px;
+  background-color: #2E3D48
 }
 
 .navButton{
@@ -27,15 +37,23 @@
 
 .embeddedImage{
   width:100%;
+  height:auto;
+}
+
+.canvasContainer{
+  width:100%
 }
 
 .imageCanvas{
   /* border: 1px solid black; */
-  width: 80vw;
+  /* left:20vw; */
+  /* width:200px; */
   /* height:100%; */
   background-color: gainsboro;  
   overflow: hidden;
   box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+
+
 }
 
 .imageCanvas, svg{
