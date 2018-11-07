@@ -19,7 +19,6 @@ class App extends Component {
   }
 
   setImage(imagePath) {
-    console.log("Settin g!! " + imagePath)
     this.setState({ image: imagePath })
   }
 

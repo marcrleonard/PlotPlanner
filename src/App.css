@@ -6,7 +6,8 @@
   width:100vw;
   height:100vh;
   display:flex;
-  background-color: gainsboro
+  background-color: gainsboro;
+  overflow:hidden;
 }
 
 .canvasInfo{
@@ -38,10 +39,17 @@
 .embeddedImage{
   width:100%;
   height:auto;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
 }
 
 .canvasContainer{
-  width:100%
+  width:100%;
+  /* object-fit:contain; */
+}
+
+.underCanvas{
+  overflow: hidden;
+  background-color: gainsboro;  
 }
 
 .imageCanvas{
@@ -49,9 +57,9 @@
   /* left:20vw; */
   /* width:200px; */
   /* height:100%; */
-  background-color: gainsboro;  
-  overflow: hidden;
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  
+  /* width:100%; */
+  /* box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19); */
 
 
 }
