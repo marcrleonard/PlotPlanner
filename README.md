@@ -1,44 +1,38 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+##PlotPlanner
 
-## Available Scripts
+####What is it?
 
-In the project directory, you can run:
+This is a fork off a few existing projects the create a better interface to work with a pen plotter. It has a GUI, and a python interface. In a lot of ways, I am trying to create a simple, more modern version of how Inkscape is used to plot SVGs
 
-### `npm start`
+####What's it made of?
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+This project is broken into two parts:
 
-The page will reload if you make edits.<br>
-You will also see any lint errors in the console.
+1. A front end interface made in React. This will display a loaded SVG, and send it as a plotting job to the backend. Eventually this will allow you to add multiple passes, hooks, and other handy actions.
+2. The Python backend. This is a fork/overhauled of iDraw inkscape extension. There are a few reasons this is necessary...
+    - Remove Python 2 cruft
+    - Provide a simpler interface to change settings. Currently, it relies on argparse. I've obscured this so now you can use a dictionary.
+    - Allow it to be used as a module. I've taken inspiration from how Axidraw has written their module.  
+    
 
-### `npm test`
+####Where is it now?
 
-Launches the test runner in the interactive watch mode.<br>
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+The front end and back end are working independently. 
 
-### `npm run build`
+*Front end:*
 
-Builds the app for production to the `build` folder.<br>
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- The front end can load an SVG and display it
 
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+*Back end:*
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- The backend has been cleaned of python2. 
+- It has been 'modulized'. So you can call the python module directly
+- I've replaced the 'argparse' mess. Now you can give it a dictionary of settings.
 
-### `npm run eject`
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+####Todo:
+- Remove all unnecessary files. The python folder is basically a clone of the inkscape extensions folder. 
+- Test all the settings
+- Create a better validator for the settings.
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
