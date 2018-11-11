@@ -35,7 +35,7 @@ import struct
 import sys
 import termios
 
-from plotcontrol import serial
+from python.plotcontrol import serial
 from python.plotcontrol.serial.serialutil import SerialBase, SerialException, to_bytes, \
     portNotOpenError, writeTimeoutError, Timeout
 
