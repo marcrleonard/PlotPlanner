@@ -60,6 +60,9 @@ def to_bytes(seq):
     elif isinstance(seq, memoryview):
         return seq.tobytes()
     elif isinstance(seq, unicode):
+
+        return str(seq).encode()
+
         raise TypeError('unicode strings are not supported, please encode to bytes: {!r}'.format(seq))
     else:
         # handle list of integers and bytes (one or more items) for Python 2 and 3
@@ -67,6 +70,7 @@ def to_bytes(seq):
 
         #################################
         # this is how it's done in axidraw, which, I think has better compat with python3
+
 
         # if self.options.port_config == 1: # port_config value "1": Use first available AxiDraw.
         #     self.options.port = None
@@ -91,7 +95,6 @@ def to_bytes(seq):
         #     self.serial_port = self.options.port
 
         #################################
-
 
 
 
