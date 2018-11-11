@@ -497,6 +497,10 @@ class WCB(inkex.Effect):
                 serialPort = serial.Serial(comPort, timeout=1.0)  # 1 second timeout!
                 serialPort.write('v\r')
                 strVersion = serialPort.readline()
+
+                if isinstance(strVersion, bytes):
+                    strVersion = strVersion.decode()
+
                 if strVersion and strVersion.startswith('EBB'):
                     return serialPort
 
@@ -524,9 +528,12 @@ class WCB(inkex.Effect):
         if len(foundPort) < 2:
             foundPort = self.findPort()
 
-        from plotcontrol import ebb_serial
-        serialPort = ebb_serial.testPort(foundPort)
-        # serialPort = self.testPort(foundPort)
+        # from python.plotcontrol import ebb_serial
+        # serialPort = ebb_serial.testPort(foundPort)
+        serialPort = self.testPort(foundPort)
+
+        print(serialPort)
+
         if serialPort:
             return serialPort
         else:
@@ -1713,8 +1720,8 @@ class WCB(inkex.Effect):
 
         '''
 
-        # spewSegmentDebugData = False
-        spewSegmentDebugData = True
+        spewSegmentDebugData = False
+        # spewSegmentDebugData = True
 
         if spewSegmentDebugData:
             inkex.errormsg('\nPlotSegment (x = %1.2f, y = %1.2f, Vi = %1.2f, Vf = %1.2f ) '
