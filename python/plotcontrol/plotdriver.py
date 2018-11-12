@@ -24,8 +24,6 @@
 import sys
 sys.path.append('.')
 
-import gettext
-import math
 import time
 from math import sqrt
 from array import *
@@ -41,32 +39,46 @@ from python.plotcontrol import idraw_conf  # Some settings can be changed here.
 from python.plotcontrol import cubicsuperpath
 
 
-F_DEFAULT_SPEED = 1
-N_PEN_DOWN_DELAY = 400  # delay (ms) for the pen to go down before the next move
-N_PEN_UP_DELAY = 400  # delay (ms) for the pen to up down before the next move
 
-N_PEN_UP_POS = 20  # Default pen-up position
-N_PEN_DOWN_POS = 40  # Default pen-down position
+class Options(object):
+    def __init__(self):
+        self.serialPortName = ''
+        self.resumeType = 'controls'
+        self.layernumber = 1  # Default inkscape layer
+        self.tab = "controls"
+        self.manualType = 'controls'
+        self.penDownSpeed = 1
+        self.setupType = 'controls'
+        self.WalkDistance = 1
+        self.smoothness = 2.0
+        self.cornering = 2.0
+        self.constSpeed = False
+        self.resolution = 3
+        self.rapidSpeed = 1
+        self.penUpPosition = 20  # Default pen-up position
+        self.penUpDelay = 400  # delay (ms) for the pen to up down before the next move
+        self.penDownDelay = 400 # delay (ms) for the pen to go down before the next move
+        self.penDownPosition = 40  # Default pen-down position
+        self.ServoUpSpeed = 50  # Default pen-lift speed
+        self.ServoDownSpeed = 50  # Default pen-lift speed
+        self.autoRotate = True
 
-N_LASER_POWER_POS = 50  # Default pen-down position
 
-N_SERVOSPEED = 50  # Default pen-lift speed
-N_DEFAULT_LAYER = 1  # Default inkscape layer
 
 
 class PlotDriver(inkex.Effect):
 
     def __init__(self, input_options, filename):
 
-        _options = []
+        # _options = []
 
         self.filename = filename
 
-        for k, v in input_options.items():
-            if isinstance(v, bool):
-                _options.append('--{}={}'.format(k, str(v).lower()))
-            else:
-                _options.append('--{}={}'.format(k, v))
+        # for k, v in input_options.items():
+        #     if isinstance(v, bool):
+        #         _options.append('--{}={}'.format(k, str(v).lower()))
+        #     else:
+        #         _options.append('--{}={}'.format(k, v))
 
         # for option in _options:
         #     print(option)
@@ -74,7 +86,7 @@ class PlotDriver(inkex.Effect):
         # It unclear to me if this is necc.
         # In the main implementation of the plugin, it needs the SVG as the last argument, but I'm pretty sure
         # I was able to circumvent this in the effect() function. Leaving it here for now...
-        _options.append(filename)
+        # _options.append(filename)
 
 
 
@@ -84,106 +96,106 @@ class PlotDriver(inkex.Effect):
 
         self.start_time = time.time()
 
-        self.OptionParser.add_option("--tab",
-                                     action="store", type="string",
-                                     dest="tab", default="controls",
-                                     help="The active tab when Apply was pressed")
-
-        self.OptionParser.add_option("--penUpPosition",
-                                     action="store", type="int",
-                                     dest="penUpPosition", default=N_PEN_UP_POS,
-                                     help="Position of pen when lifted")
-        self.OptionParser.add_option("--penDownPosition",
-                                     action="store", type="int",
-                                     dest="penDownPosition", default=N_PEN_DOWN_POS,
-                                     help="Position of pen for painting")
-        self.OptionParser.add_option("--laserPower",
-                                     action="store", type="int",
-                                     dest="laserPower", default=N_LASER_POWER_POS,
-                                     help="laser Power for pin RB3 output PWM")
-        self.OptionParser.add_option("--setupType",
-                                     action="store", type="string",
-                                     dest="setupType", default="controls",
-                                     help="The active option when Apply was pressed")
-        self.OptionParser.add_option('--serialPortName',
-                                     action='store', type='string',
-                                     dest='serialPortName', default="",
-                                     help='Serial port')
-        self.OptionParser.add_option("--penDownSpeed",
-                                     action="store", type="int",
-                                     dest="penDownSpeed", default=F_DEFAULT_SPEED,
-                                     help="Speed (step/sec) while pen is down.")
-
-        self.OptionParser.add_option("--rapidSpeed",
-                                     action="store", type="int",
-                                     dest="rapidSpeed", default=F_DEFAULT_SPEED,
-                                     help="Rapid speed (percent) while pen is up.")
-
-        self.OptionParser.add_option("--ServoUpSpeed",
-                                     action="store", type="int",
-                                     dest="ServoUpSpeed", default=N_SERVOSPEED,
-                                     help="Rate of lifting pen ")
-        self.OptionParser.add_option("--penUpDelay",
-                                     action="store", type="int",
-                                     dest="penUpDelay", default=N_PEN_UP_DELAY,
-                                     help="Added delay after pen up (msec).")
-        self.OptionParser.add_option("--ServoDownSpeed",
-                                     action="store", type="int",
-                                     dest="ServoDownSpeed", default=N_SERVOSPEED,
-                                     help="Rate of lowering pen ")
-        self.OptionParser.add_option("--penDownDelay",
-                                     action="store", type="int",
-                                     dest="penDownDelay", default=N_PEN_DOWN_DELAY,
-                                     help="Added delay after pen down (msec).")
-
-        self.OptionParser.add_option("--report_time",
-                                     action="store", type="inkbool",
-                                     dest="report_time", default=False,
-                                     help="Report time elapsed.")
-
-        self.OptionParser.add_option("--constSpeed",
-                                     action="store", type="inkbool",
-                                     dest="constSpeed", default=False,
-                                     help="Use constant velocity mode when pen is down")
-
-        self.OptionParser.add_option("--autoRotate",
-                                     action="store", type="inkbool",
-                                     dest="autoRotate", default=False,
-                                     help="Print in portrait or landscape mode automatically")
-
-        self.OptionParser.add_option("--smoothness",
-                                     action="store", type="float",
-                                     dest="smoothness", default=2.0,
-                                     help="Smoothness of curves")
-
-        self.OptionParser.add_option("--cornering",
-                                     action="store", type="float",
-                                     dest="cornering", default=2.0,
-                                     help="cornering speed factor")
-
-        self.OptionParser.add_option("--resolution",
-                                     action="store", type="int",
-                                     dest="resolution", default=3,
-                                     help="Resolution factor.")
-
-        self.OptionParser.add_option("--manualType",
-                                     action="store", type="string",
-                                     dest="manualType", default="controls",
-                                     help="The active option when Apply was pressed")
-        self.OptionParser.add_option("--WalkDistance",
-                                     action="store", type="float",
-                                     dest="WalkDistance", default=1,
-                                     help="Distance for manual walk")
-
-        self.OptionParser.add_option("--resumeType",
-                                     action="store", type="string",
-                                     dest="resumeType", default="controls",
-                                     help="The active option when Apply was pressed")
-
-        self.OptionParser.add_option("--layernumber",
-                                     action="store", type="int",
-                                     dest="layernumber", default=N_DEFAULT_LAYER,
-                                     help="Selected layer for multilayer plotting")
+        # self.OptionParser.add_option("--tab",
+        #                              action="store", type="string",
+        #                              dest="tab", default="controls",
+        #                              help="The active tab when Apply was pressed")
+        #
+        # self.OptionParser.add_option("--penUpPosition",
+        #                              action="store", type="int",
+        #                              dest="penUpPosition", default=N_PEN_UP_POS,
+        #                              help="Position of pen when lifted")
+        # self.OptionParser.add_option("--penDownPosition",
+        #                              action="store", type="int",
+        #                              dest="penDownPosition", default=N_PEN_DOWN_POS,
+        #                              help="Position of pen for painting")
+        # self.OptionParser.add_option("--laserPower",
+        #                              action="store", type="int",
+        #                              dest="laserPower", default=N_LASER_POWER_POS,
+        #                              help="laser Power for pin RB3 output PWM")
+        # self.OptionParser.add_option("--setupType",
+        #                              action="store", type="string",
+        #                              dest="setupType", default="controls",
+        #                              help="The active option when Apply was pressed")
+        # self.OptionParser.add_option('--serialPortName',
+        #                              action='store', type='string',
+        #                              dest='serialPortName', default="",
+        #                              help='Serial port')
+        # self.OptionParser.add_option("--penDownSpeed",
+        #                              action="store", type="int",
+        #                              dest="penDownSpeed", default=F_DEFAULT_SPEED,
+        #                              help="Speed (step/sec) while pen is down.")
+        #
+        # self.OptionParser.add_option("--rapidSpeed",
+        #                              action="store", type="int",
+        #                              dest="rapidSpeed", default=F_DEFAULT_SPEED,
+        #                              help="Rapid speed (percent) while pen is up.")
+        #
+        # self.OptionParser.add_option("--ServoUpSpeed",
+        #                              action="store", type="int",
+        #                              dest="ServoUpSpeed", default=N_SERVOSPEED,
+        #                              help="Rate of lifting pen ")
+        # self.OptionParser.add_option("--penUpDelay",
+        #                              action="store", type="int",
+        #                              dest="penUpDelay", default=N_PEN_UP_DELAY,
+        #                              help="Added delay after pen up (msec).")
+        # self.OptionParser.add_option("--ServoDownSpeed",
+        #                              action="store", type="int",
+        #                              dest="ServoDownSpeed", default=N_SERVOSPEED,
+        #                              help="Rate of lowering pen ")
+        # self.OptionParser.add_option("--penDownDelay",
+        #                              action="store", type="int",
+        #                              dest="penDownDelay", default=N_PEN_DOWN_DELAY,
+        #                              help="Added delay after pen down (msec).")
+        #
+        # self.OptionParser.add_option("--report_time",
+        #                              action="store", type="inkbool",
+        #                              dest="report_time", default=False,
+        #                              help="Report time elapsed.")
+        #
+        # self.OptionParser.add_option("--constSpeed",
+        #                              action="store", type="inkbool",
+        #                              dest="constSpeed", default=False,
+        #                              help="Use constant velocity mode when pen is down")
+        #
+        # self.OptionParser.add_option("--autoRotate",
+        #                              action="store", type="inkbool",
+        #                              dest="autoRotate", default=False,
+        #                              help="Print in portrait or landscape mode automatically")
+        #
+        # self.OptionParser.add_option("--smoothness",
+        #                              action="store", type="float",
+        #                              dest="smoothness", default=2.0,
+        #                              help="Smoothness of curves")
+        #
+        # self.OptionParser.add_option("--cornering",
+        #                              action="store", type="float",
+        #                              dest="cornering", default=2.0,
+        #                              help="cornering speed factor")
+        #
+        # self.OptionParser.add_option("--resolution",
+        #                              action="store", type="int",
+        #                              dest="resolution", default=3,
+        #                              help="Resolution factor.")
+        #
+        # self.OptionParser.add_option("--manualType",
+        #                              action="store", type="string",
+        #                              dest="manualType", default="controls",
+        #                              help="The active option when Apply was pressed")
+        # self.OptionParser.add_option("--WalkDistance",
+        #                              action="store", type="float",
+        #                              dest="WalkDistance", default=1,
+        #                              help="Distance for manual walk")
+        #
+        # self.OptionParser.add_option("--resumeType",
+        #                              action="store", type="string",
+        #                              dest="resumeType", default="controls",
+        #                              help="The active option when Apply was pressed")
+        #
+        # self.OptionParser.add_option("--layernumber",
+        #                              action="store", type="int",
+        #                              dest="layernumber", default=N_DEFAULT_LAYER,
+        #                              help="Selected layer for multilayer plotting")
 
         self.serialPort = None
         self.bPenIsUp = None  # Initial state of pen is neither up nor down, but _unknown_.
@@ -255,9 +267,14 @@ class PlotDriver(inkex.Effect):
         self.warnOutOfBounds = False
         self.run=True
 
-        self.getoptions(_options)
+        self.options = Options()
+        # self.getoptions(_options)
+
+        for k,v in input_options.items():
+            self.options.k = v
 
         print(vars(self.options))
+        print(len(vars(self.options)))
 
 
     # def calc_time(self):
@@ -352,7 +369,7 @@ class PlotDriver(inkex.Effect):
 
             self.serialPort = self.openPort()
             if self.serialPort is None:
-                inkex.errormsg(gettext.gettext("Failed to connect to AxiDraw. :("))
+                print("Failed to connect to AxiDraw. :(")
 
             if self.options.tab == 'splash':
                 self.LayersFoundToPlot = False
@@ -400,7 +417,7 @@ class PlotDriver(inkex.Effect):
 
 
                     else:
-                        inkex.errormsg(gettext.gettext("There does not seem to be any in-progress plot to resume."))
+                        print("There does not seem to be any in-progress plot to resume.")
 
             elif self.options.tab == 'layers':
                 useOldResumeData = False
@@ -423,8 +440,8 @@ class PlotDriver(inkex.Effect):
                         self.svg.remove(node)
                     for node in self.svg.xpath('//svg:eggbot', namespaces=inkex.NSS):
                         self.svg.remove(node)
-                    inkex.errormsg(
-                        gettext.gettext("I've removed all AxiDraw data from this SVG file. Have a great day!"))
+                    print(
+                        "I've removed all AxiDraw data from this SVG file. Have a great day!")
                     return
                 else:
                     useOldResumeData = False
@@ -577,7 +594,7 @@ class PlotDriver(inkex.Effect):
                         nRetryCount += 1
             except Exception as e:
                 print('error in query():\n' + str(e))
-                inkex.errormsg(gettext.gettext("Error reading serial data."))
+                print("Error reading serial data.")
             return response
         else:
             return None
@@ -592,22 +609,22 @@ class PlotDriver(inkex.Effect):
                     # get new response to replace null response if necessary
                     response = comPort.readline()
                     nRetryCount += 1
-                    inkex.errormsg("Retry" + str(nRetryCount))
+                    print("Retry" + str(nRetryCount))
                 if (response.decode()).strip().startswith("OK"):
-                    pass  # inkex.errormsg( 'OK after command: ' + cmd ) #Debug option: indicate which command.
+                    pass  # print( 'OK after command: ' + cmd ) #Debug option: indicate which command.
                 else:
                     if (response != ''):
-                        inkex.errormsg('Error: Unexpected response from EBB.')
-                        inkex.errormsg('   Command: ' + cmd.strip())
-                        inkex.errormsg('   Response: ' + str(response.strip()))
+                        print('Error: Unexpected response from EBB.')
+                        print('   Command: ' + cmd.strip())
+                        print('   Response: ' + str(response.strip()))
                     else:
-                        inkex.errormsg('EBB Serial Timeout after command: ' + cmd)
+                        print('EBB Serial Timeout after command: ' + cmd)
 
             # 		except Exception,e:
-            # 			inkex.errormsg(  str(e))	#For debugging: one may wish to display the error.
+            # 			print(  str(e))	#For debugging: one may wish to display the error.
             except Exception as e:
                 print('command() ' + str(e))
-                inkex.errormsg('Failed after command: ' + cmd)
+                print('Failed after command: ' + cmd)
 
 
     def doTimedPause(self, portName, nPause):
@@ -844,14 +861,14 @@ class PlotDriver(inkex.Effect):
             return
         if (not self.getDocProps()):
             # Cannot handle the document's dimensions!!!
-            inkex.errormsg(gettext.gettext(
+            print(
                 'This document does not have valid dimensions.\r' +
                 'The document dimensions must be in either' +
                 'millimeters (mm) or inches (in).\r\r' +
                 'Consider starting with the "Letter landscape" or ' +
                 'the "A4 landscape" template.\r\r' +
                 'Document dimensions may also be set in Inkscape,\r' +
-                'using File > Document Properties.'))
+                'using File > Document Properties.')
             return
 
         # Viewbox handling
@@ -862,12 +879,12 @@ class PlotDriver(inkex.Effect):
             if (vinfo[2] != 0) and (vinfo[3] != 0):
                 sx = self.svgWidth / float(vinfo[2])
                 sy = self.svgHeight / float(vinfo[3])
-                # 				inkex.errormsg( 'self.svgWidth:  ' + str(self.svgWidth) )
-                # 				inkex.errormsg( 'float( vinfo[2] ):  ' + str(float( vinfo[2] ) ))
-                # 				inkex.errormsg( 'sx:  ' + str(sx) )
+                # 				print( 'self.svgWidth:  ' + str(self.svgWidth) )
+                # 				print( 'float( vinfo[2] ):  ' + str(float( vinfo[2] ) ))
+                # 				print( 'sx:  ' + str(sx) )
                 self.svgTransform = parseTransform(
                     'scale(%f,%f) translate(%f,%f)' % (sx, sy, -float(vinfo[0]), -float(vinfo[1])))
-        # 				inkex.errormsg( 'svgTransform:  ' + str(self.svgTransform) )
+        # 				print( 'svgTransform:  ' + str(self.svgTransform) )
 
         self.ServoSetup()
         self.penUp()
@@ -901,14 +918,14 @@ class PlotDriver(inkex.Effect):
                 # Clear saved position data from the SVG file,
                 #  IF we have completed a normal plot from the splash, layer, or resume tabs.
             if (self.warnOutOfBounds):
-                inkex.errormsg(gettext.gettext(
-                    'Warning: AxiDraw movement was limited by its physical range of motion. If everything looks right, your document may have an error with its units or scaling. Contact technical support for help!'))
+                print(
+                    'Warning: AxiDraw movement was limited by its physical range of motion. If everything looks right, your document may have an error with its units or scaling. Contact technical support for help!')
             # if (self.options.report_time):
 
             elapsed_time = time.time() - self.start_time
             m, s = divmod(elapsed_time, 60)
             h, m = divmod(m, 60)
-            inkex.errormsg("Elapsed time: %d:%02d:%02d" % (h, m, s) + " (Hours, minutes, seconds)")
+            print("Elapsed time: %d:%02d:%02d" % (h, m, s) + " (Hours, minutes, seconds)")
             self.sendDisableMotors()  # diaable motor
 
             print('all operations complete.')
@@ -1281,17 +1298,17 @@ class PlotDriver(inkex.Effect):
                 pass
             elif node.tag == inkex.addNS('text', 'svg') or node.tag == 'text':
                 if ('text' not in self.warnings) and (self.plotCurrentLayer):
-                    inkex.errormsg(gettext.gettext('Warning: Some elements omitted.\n' +
+                    print('Warning: Some elements omitted.\n' +
                                                    'Please convert text to a path before drawing, using \n' +
                                                    'Path > Object to Path. Or, use the Hershey Text extension, ' +
-                                                   'which can be found under Extensions > Render.'))
+                                                   'which can be found under Extensions > Render.')
                     self.warnings['text'] = 1
                 pass
             elif node.tag == inkex.addNS('image', 'svg') or node.tag == 'image':
                 if ('image' not in self.warnings) and (self.plotCurrentLayer):
-                    inkex.errormsg(gettext.gettext('Warning: Some elements omitted.\n' +
+                    print('Warning: Some elements omitted.\n' +
                                                    'Please convert images to line art before drawing. ' +
-                                                   ' Consider using the Path > Trace bitmap tool. '))
+                                                   ' Consider using the Path > Trace bitmap tool. ')
                     self.warnings['image'] = 1
                 pass
             elif node.tag == inkex.addNS('pattern', 'svg') or node.tag == 'pattern':
@@ -1321,8 +1338,8 @@ class PlotDriver(inkex.Effect):
             else:
                 if (str(node.tag) not in self.warnings) and (self.plotCurrentLayer):
                     t = str(node.tag).split('}')
-                    inkex.errormsg(gettext.gettext('Warning: unable to draw <' + str(t[-1]) +
-                                                   '> object, please convert it to a path first.'))
+                    print('Warning: unable to draw <' + str(t[-1]) +
+                                                   '> object, please convert it to a path first.')
                     self.warnings[str(node.tag)] = 1
                 pass
 
@@ -1368,7 +1385,8 @@ class PlotDriver(inkex.Effect):
 
 
 
-        if self.run:
+        if True:
+        # if self.run:
             # self.bStopped = True
 
 
@@ -1448,7 +1466,7 @@ class PlotDriver(inkex.Effect):
         spewTrajectoryDebugData = False
 
         if spewTrajectoryDebugData:
-            inkex.errormsg('\nPlanTrajectory()\n')
+            print('\nPlanTrajectory()\n')
 
         if self.bStopped:
             return
@@ -1466,7 +1484,7 @@ class PlotDriver(inkex.Effect):
         # Handle simple segments (lines) that do not require any complex planning:
         if (len(inputPath) < 3):
             if spewTrajectoryDebugData:
-                inkex.errormsg('SHORTPATH ESCAPE: ')
+                print('SHORTPATH ESCAPE: ')
             self.plotSegmentWithVelocity(xy[0], xy[1], 0, 0)
             return
 
@@ -1475,8 +1493,8 @@ class PlotDriver(inkex.Effect):
 
         if spewTrajectoryDebugData:
             for xy in inputPath:
-                inkex.errormsg('x: %1.2f,  y: %1.2f' % (xy[0], xy[1]))
-            inkex.errormsg('\nTrajLength: ' + str(TrajLength) + '\n')
+                print('x: %1.2f,  y: %1.2f' % (xy[0], xy[1]))
+            print('\nTrajLength: ' + str(TrajLength) + '\n')
 
         # Absolute maximum and minimum speeds allowed:
 
@@ -1512,8 +1530,8 @@ class PlotDriver(inkex.Effect):
 
         if spewTrajectoryDebugData:
             for dist in TrajDists:
-                inkex.errormsg('TrajDists: %1.3f' % dist)
-            inkex.errormsg('\n')
+                print('TrajDists: %1.3f' % dist)
+            print('\n')
 
         # time to reach full speed (from zero), at maximum acceleration. Defined in settings:
 
@@ -1529,10 +1547,10 @@ class PlotDriver(inkex.Effect):
         accelDist = 0.5 * accelRate * tMax * tMax
 
         if spewTrajectoryDebugData:
-            inkex.errormsg('speedLimit: %1.3f' % speedLimit)
-            inkex.errormsg('tMax: %1.3f' % tMax)
-            inkex.errormsg('accelRate: %1.3f' % accelRate)
-            inkex.errormsg('accelDist: %1.3f' % accelDist)
+            print('speedLimit: %1.3f' % speedLimit)
+            print('tMax: %1.3f' % tMax)
+            print('accelRate: %1.3f' % accelRate)
+            print('accelDist: %1.3f' % accelDist)
             CosinePrintArray = array('f')
 
         '''
@@ -1618,7 +1636,7 @@ class PlotDriver(inkex.Effect):
                 # accelerate to maximum speed or come to a full stop before this vertex.
                 VcurrentMax = speedLimit
                 if spewTrajectoryDebugData:
-                    inkex.errormsg('Speed Limit on vel : ' + str(i))
+                    print('Speed Limit on vel : ' + str(i))
             else:
                 # There is _not necessarily_ enough distance in the segment for us to either
                 # accelerate to maximum speed or come to a full stop before this vertex.
@@ -1629,7 +1647,7 @@ class PlotDriver(inkex.Effect):
                     VcurrentMax = speedLimit
 
                 if spewTrajectoryDebugData:
-                    inkex.errormsg('TrajVels I: %1.3f' % VcurrentMax)
+                    print('TrajVels I: %1.3f' % VcurrentMax)
 
             '''
             Velocity at vertex: Part II
@@ -1668,14 +1686,14 @@ class PlotDriver(inkex.Effect):
         TrajVels.append(0.0 )				# Add zero velocity, for final vertex.
 
         if spewTrajectoryDebugData:
-            inkex.errormsg( ' ')
+            print( ' ')
             for dist in CosinePrintArray:
-                inkex.errormsg( 'Cosine Factor: %1.3f' % dist )
-            inkex.errormsg( ' ')
+                print( 'Cosine Factor: %1.3f' % dist )
+            print( ' ')
 
             for dist in TrajVels:
-                inkex.errormsg( 'TrajVels II: %1.3f' % dist )
-            inkex.errormsg( ' ')
+                print( 'TrajVels II: %1.3f' % dist )
+            print( ' ')
 
         '''
         Velocity at vertex: Part III
@@ -1700,7 +1718,7 @@ class PlotDriver(inkex.Effect):
                 VInitMax = plot_utils.vInitial_VF_A_Dx(Vfinal ,-accelRate ,SegLength)
 
                 if spewTrajectoryDebugData:
-                    inkex.errormsg( 'VInit Calc: (Vfinal = %1.3f, accelRate = %1.3f, SegLength = %1.3f) '
+                    print( 'VInit Calc: (Vfinal = %1.3f, accelRate = %1.3f, SegLength = %1.3f) '
                                     % (Vfinal, accelRate, SegLength))
 
                 if (VInitMax < Vinitial):
@@ -1709,9 +1727,9 @@ class PlotDriver(inkex.Effect):
 
         if spewTrajectoryDebugData:
             for dist in TrajVels:
-                inkex.errormsg( 'TrajVels III: %1.3f' % dist )
+                print( 'TrajVels III: %1.3f' % dist )
 
-            inkex.errormsg( ' ')
+            print( ' ')
 
         for i in range(1, TrajLength):
             self.plotSegmentWithVelocity( inputPath[i][0] , inputPath[i][1] ,TrajVels[i - 1], TrajVels[i])
@@ -1741,10 +1759,10 @@ class PlotDriver(inkex.Effect):
         # spewSegmentDebugData = True
 
         if spewSegmentDebugData:
-            inkex.errormsg('\nPlotSegment (x = %1.2f, y = %1.2f, Vi = %1.2f, Vf = %1.2f ) '
+            print('\nPlotSegment (x = %1.2f, y = %1.2f, Vi = %1.2f, Vf = %1.2f ) '
                            % (xDest, yDest, Vi, Vf))
             if self.resumeMode:
-                inkex.errormsg('resumeMode is active')
+                print('resumeMode is active')
 
         ConstantVelMode = False
         if (self.options.constSpeed and not self.virtualPenIsUp):
@@ -1806,12 +1824,12 @@ class PlotDriver(inkex.Effect):
         tDecelMax = (speedLimit - finalVel) / accelRate
 
         if spewSegmentDebugData:
-            inkex.errormsg('accelRate: ' + str(accelRate))
-            inkex.errormsg('speedLimit: ' + str(speedLimit))
-            inkex.errormsg('initialVel: ' + str(initialVel))
-            inkex.errormsg('finalVel: ' + str(finalVel))
-            inkex.errormsg('tAccelMax: ' + str(tAccelMax))
-            inkex.errormsg('tDecelMax: ' + str(tDecelMax))
+            print('accelRate: ' + str(accelRate))
+            print('speedLimit: ' + str(speedLimit))
+            print('initialVel: ' + str(initialVel))
+            print('finalVel: ' + str(finalVel))
+            print('tAccelMax: ' + str(tAccelMax))
+            print('tDecelMax: ' + str(tDecelMax))
 
         # Distance that is required to reach full speed, from our start at speed initialVel:
         # distance = vi * t + (1/2) a t^2
@@ -1883,7 +1901,7 @@ class PlotDriver(inkex.Effect):
                 '''
 
                 if spewSegmentDebugData:
-                    inkex.errormsg('Type 1: Trapezoid' + '\n')
+                    print('Type 1: Trapezoid' + '\n')
                 speedMax = speedLimit  # We will reach _full cruising speed_!
 
                 intervals = int(math.floor(tAccelMax / timeSlice))  # Number of intervals during acceleration
@@ -1904,7 +1922,7 @@ class PlotDriver(inkex.Effect):
                         durationArray.append(int(round(timeElapsed * 1000.0)))
                         distArray.append(position)  # Estimated distance along direction of travel
                     if spewSegmentDebugData:
-                        inkex.errormsg('Accel intervals: ' + str(intervals))
+                        print('Accel intervals: ' + str(intervals))
 
                 # Add a center "coasting" speed interval IF there is time for it.
                 coastingDistance = plotDistance - (accelDistMax + decelDistMax)
@@ -1918,7 +1936,7 @@ class PlotDriver(inkex.Effect):
                     position += velocity * cruisingTime
                     distArray.append(position)  # Estimated distance along direction of travel
                     if spewSegmentDebugData:
-                        inkex.errormsg('Coast Distance: ' + str(coastingDistance))
+                        print('Coast Distance: ' + str(coastingDistance))
 
                 intervals = int(math.floor(tDecelMax / timeSlice))  # Number of intervals during deceleration
 
@@ -1933,7 +1951,7 @@ class PlotDriver(inkex.Effect):
                         durationArray.append(int(round(timeElapsed * 1000.0)))
                         distArray.append(position)  # Estimated distance along direction of travel
                     if spewSegmentDebugData:
-                        inkex.errormsg('Decel intervals: ' + str(intervals))
+                        print('Decel intervals: ' + str(intervals))
 
             else:
                 '''
@@ -1992,18 +2010,18 @@ class PlotDriver(inkex.Effect):
                 '''
 
                 if spewSegmentDebugData:
-                    inkex.errormsg('\nType 3: Triangle')
+                    print('\nType 3: Triangle')
                 Ta = (sqrt(2 * initialVel * initialVel + 2 * finalVel * finalVel + 4 * accelRate * plotDistance)
                       - 2 * initialVel) / (2 * accelRate)
 
                 if (Ta < 0):
                     Ta = 0
                     if spewSegmentDebugData:
-                        inkex.errormsg('Warning: Negative transit time computed.')  # Should not happen. :)
+                        print('Warning: Negative transit time computed.')  # Should not happen. :)
 
                 Vmax = initialVel + accelRate * Ta
                 if spewSegmentDebugData:
-                    inkex.errormsg('Vmax: ' + str(Vmax))
+                    print('Vmax: ' + str(Vmax))
 
                 intervals = int(math.floor(Ta / timeSlice))  # Number of intervals during acceleration
 
@@ -2015,7 +2033,7 @@ class PlotDriver(inkex.Effect):
                 if ((intervals + Dintervals) > 4):
                     if (intervals > 0):
                         if spewSegmentDebugData:
-                            inkex.errormsg('Triangle intervals UP: ' + str(intervals))
+                            print('Triangle intervals UP: ' + str(intervals))
 
                         timePerInterval = Ta / intervals
                         velocityStepSize = (Vmax - initialVel) / (intervals + 1.0)
@@ -2031,11 +2049,11 @@ class PlotDriver(inkex.Effect):
                             distArray.append(position)  # Estimated distance along direction of travel
                     else:
                         if spewSegmentDebugData:
-                            inkex.errormsg('Note: Skipping accel phase in triangle.')
+                            print('Note: Skipping accel phase in triangle.')
 
                     if (Dintervals > 0):
                         if spewSegmentDebugData:
-                            inkex.errormsg('Triangle intervals Down: ' + str(intervals))
+                            print('Triangle intervals Down: ' + str(intervals))
 
                         timePerInterval = Td / Dintervals
                         velocityStepSize = (Vmax - finalVel) / (Dintervals + 1.0)
@@ -2051,7 +2069,7 @@ class PlotDriver(inkex.Effect):
                             distArray.append(position)  # Estimated distance along direction of travel
                     else:
                         if spewSegmentDebugData:
-                            inkex.errormsg('Note: Skipping decel phase in triangle.')
+                            print('Note: Skipping decel phase in triangle.')
                 else:
                     '''
                     #Case 2: 'Linear or constant velocity changes'
@@ -2067,7 +2085,7 @@ class PlotDriver(inkex.Effect):
                     '''
 
                     if spewSegmentDebugData:
-                        inkex.errormsg('Type 2: Linear' + '\n')
+                        print('Type 2: Linear' + '\n')
                     # xFinal = vi * t  + (1/2) a * t^2, and vFinal = vi + a * t
                     # Combining these (with same t) gives: 2 a x = (vf^2 - vi^2)  => a = (vf^2 - vi^2)/2x
                     # So long as this 'a' is less than accelRate, we can linearly interpolate in velocity.
@@ -2111,7 +2129,7 @@ class PlotDriver(inkex.Effect):
             #Case 4: 'Constant Velocity mode'
             '''
             if spewSegmentDebugData:
-                inkex.errormsg('-> [Constant Velocity Mode Segment]' + '\n')
+                print('-> [Constant Velocity Mode Segment]' + '\n')
             # Single segment with constant velocity.
 
             if (self.options.constSpeed and not self.virtualPenIsUp):
@@ -2126,7 +2144,7 @@ class PlotDriver(inkex.Effect):
                 velocity = self.PenDownSpeed / 10
 
             if spewSegmentDebugData:
-                inkex.errormsg('velocity: ' + str(velocity))
+                print('velocity: ' + str(velocity))
 
             timeElapsed = plotDistance / velocity
             durationArray.append(int(round(timeElapsed * 1000.0)))
@@ -2142,7 +2160,7 @@ class PlotDriver(inkex.Effect):
         '''
 
         if spewSegmentDebugData:
-            inkex.errormsg('position/plotDistance: ' + str(position / plotDistance))
+            print('position/plotDistance: ' + str(position / plotDistance))
 
         for index in range(0, len(distArray)):
             # Scale our trajectory to the "actual" travel distance that we need:
@@ -2183,7 +2201,7 @@ class PlotDriver(inkex.Effect):
                             time.sleep(float(moveTime - 10) / 1000.0)  # pause before issuing next command
                     else:
                         if spewSegmentDebugData:
-                            inkex.errormsg('ShortMoves: ' + str(moveTime) + '.')
+                            print('ShortMoves: ' + str(moveTime) + '.')
 
                     self.fCurrX += xSteps / self.stepsPerInch  # Update current position
                     self.fCurrY += ySteps / self.stepsPerInch
@@ -2191,16 +2209,18 @@ class PlotDriver(inkex.Effect):
                     self.svgLastKnownPosX = self.fCurrX - idraw_conf.StartPos_X
                     self.svgLastKnownPosY = self.fCurrY - idraw_conf.StartPos_Y
                 # if spewSegmentDebugData:
-                #	inkex.errormsg( '\nfCurrX,fCurrY (x = %1.2f, y = %1.2f) ' % (self.fCurrX, self.fCurrY))
+                #	print( '\nfCurrX,fCurrY (x = %1.2f, y = %1.2f) ' % (self.fCurrX, self.fCurrY))
 
+        # todo: Here! replace this query method with self.run. That will replace the 'stop' method to recieve input from
+        # this class attribute
         strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
         if strButton[0] == '1':  # button pressed
-            self.svgNodeCount = self.nodeCount - 1;
+            self.svgNodeCount = self.nodeCount - 1
             self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
             self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
             self.penUp()
-            inkex.errormsg('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
-            inkex.errormsg('Use the "resume" feature to continue.')
+            print('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
+            print('Use the "resume" feature to continue.')
             self.bStopped = True
             return
 
@@ -2212,7 +2232,7 @@ class PlotDriver(inkex.Effect):
         Here, we convert to actual motor steps, w/ set DPI.
         '''
 
-        inkex.errormsg('PlotLine: x, y: ' + str(xDest) + ', ' + str(yDest))
+        print('PlotLine: x, y: ' + str(xDest) + ', ' + str(yDest))
 
         if (self.ignoreLimits == False):
             xDest, xBounded = plot_utils.checkLimits(xDest, self.xBoundsMin, self.xBoundsMax)
@@ -2286,8 +2306,8 @@ class PlotDriver(inkex.Effect):
                 self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
                 self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
                 self.penUp()
-                inkex.errormsg('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
-                inkex.errormsg('Use the "resume" feature to continue.')
+                print('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
+                print('Use the "resume" feature to continue.')
                 self.bStopped = True
                 return
 
@@ -2319,7 +2339,7 @@ class PlotDriver(inkex.Effect):
 
         TestArray = array('i')  # signed integer
         if (TestArray.itemsize < 4):
-            inkex.errormsg('Internal array data length error. Please contact technical support.')
+            print('Internal array data length error. Please contact technical support.')
         # This is being run on a system that has a shorter length for a signed integer
         # than we are expecting. If anyone ever comes across such a system, we need to know!
 
