@@ -265,7 +265,8 @@ class Effect:
         self.getselected()
         self.getdocids()
         self.effect()
-        if output: self.output()
+        if output:
+            self.output()
 
     def uniqueId(self, old_id, make_new_id = True):
         new_id = old_id
