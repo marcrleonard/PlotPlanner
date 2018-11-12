@@ -259,11 +259,11 @@ class Effect:
     def affect(self, args=sys.argv[1:], output=True):
         """Affect an SVG document with a callback effect"""
         self.svg_file = args[-1]
-        self.getoptions(args)
-        self.parse()
+        self.getoptions(args) # I explictly call this, but it should just be overhauled.
+        self.parse() # this opens the file... it shoudl be eliminated already
         self.getposinlayer()
-        self.getselected()
-        self.getdocids()
+        self.getselected() # this will get specific IDs selected. I don't think this is necc (i will implement this manually)
+        self.getdocids() # no idea what this is
         self.effect()
         if output:
             self.output()
