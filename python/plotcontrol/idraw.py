@@ -606,7 +606,7 @@ class WCB(inkex.Effect):
             except Exception as e:
                 print('command() ' + str(e))
                 inkex.errormsg('Failed after command: ' + cmd)
-                pass
+
 
     def doTimedPause(self, portName, nPause):
         if (portName is not None):
@@ -634,9 +634,15 @@ class WCB(inkex.Effect):
         # If Res == 4, -> 2X microstepping
         # If Res == 5, -> No microstepping
 
-    def sendDisableMotors(self, portName):
+    def sendDisableMotors(self, portName=None):
+
+        if portName is None:
+            portName = self.serialPort
+
         if (portName is not None):
             self.command(portName, 'EM,0,0\r')
+            print('Motors shut down.')
+
 
     def QueryPRGButton(self, portName):
         if (portName is not None):
@@ -767,7 +773,7 @@ class WCB(inkex.Effect):
 
         if self.options.setupType == "align-mode":
             self.penUp()
-            self.sendDisableMotors(self.serialPort)
+            self.sendDisableMotors()
 
         elif self.options.setupType == "toggle-pen":
             self.TogglePen(self.serialPort)
@@ -802,11 +808,11 @@ class WCB(inkex.Effect):
             self.EnableMotors()
 
         elif self.options.manualType == "disable-motors":
-            self.sendDisableMotors(self.serialPort)
+            self.sendDisableMotors()
 
         elif self.options.manualType == "version-check":
             strVersion = self.query(self.serialPort, 'v\r')
-            inkex.errormsg('I asked the EBB for its version info, and it replied:\n ' + strVersion)
+            print('EBB version: {}'.format(strVersion.decode('utf-8')))
 
         else:  # self.options.manualType is walk motor:
             if self.options.manualType == "walk-y-motor":
@@ -895,12 +901,16 @@ class WCB(inkex.Effect):
             if (self.warnOutOfBounds):
                 inkex.errormsg(gettext.gettext(
                     'Warning: AxiDraw movement was limited by its physical range of motion. If everything looks right, your document may have an error with its units or scaling. Contact technical support for help!'))
-            if (self.options.report_time):
-                elapsed_time = time.time() - self.start_time
-                m, s = divmod(elapsed_time, 60)
-                h, m = divmod(m, 60)
-                inkex.errormsg("Elapsed time: %d:%02d:%02d" % (h, m, s) + " (Hours, minutes, seconds)")
-                self.sendDisableMotors(self.serialPort)  # diaable motor
+            # if (self.options.report_time):
+
+            elapsed_time = time.time() - self.start_time
+            m, s = divmod(elapsed_time, 60)
+            h, m = divmod(m, 60)
+            inkex.errormsg("Elapsed time: %d:%02d:%02d" % (h, m, s) + " (Hours, minutes, seconds)")
+            self.sendDisableMotors()  # diaable motor
+
+            print('all operations complete.')
+
         finally:
             # We may have had an exception and lost the serial port...
             pass
@@ -1131,7 +1141,7 @@ class WCB(inkex.Effect):
                     for i in range(1, len(pa)):
                         d += " L " + pa[i]
                     newpath = inkex.etree.Element(inkex.addNS('path', 'svg'))
-                    newpath.set('d', d);
+                    newpath.set('d', d)
                     s = node.get('style')
                     if s:
                         newpath.set('style', s)
@@ -1243,7 +1253,7 @@ class WCB(inkex.Effect):
                         'A %f,%f ' % (rx, ry) + \
                         '0 1 0 %f,%f' % (x1, cy)
                     newpath = inkex.etree.Element(inkex.addNS('path', 'svg'))
-                    newpath.set('d', d);
+                    newpath.set('d', d)
                     s = node.get('style')
                     if s:
                         newpath.set('style', s)
@@ -1354,64 +1364,69 @@ class WCB(inkex.Effect):
 
     def plotPath(self, path, matTransform):
 
-        print('Plotting!!!\n{}'.format(path))
-
-        if not self.run:
-            print('halting!!!!')
-            sys.exit()
 
 
-        '''
-        Plot the path while applying the transformation defined
-        by the matrix [matTransform].
-        '''
-        # turn this path into a cubicsuperpath (list of beziers)...
+        if self.run:
+            # self.bStopped = True
 
-        d = path.get('d')
-        if len(simplepath.parsePath(d)) == 0:
-            return
 
-        if self.plotCurrentLayer:
-            p = cubicsuperpath.parsePath(d)
 
-            # ...and apply the transformation to each point
-            applyTransformToPath(matTransform, p)
+            '''
+            Plot the path while applying the transformation defined
+            by the matrix [matTransform].
+            '''
 
-            # p is now a list of lists of cubic beziers [control pt1, control pt2, endpoint]
-            # where the start-point is the last point in the previous segment.
-            for sp in p:
+            d = path.get('d')
 
-                plot_utils.subdivideCubicPath(sp, 0.02 / self.options.smoothness)
-                nIndex = 0
+            print('Plotting path\n{}\n--------'.format(d))
 
-                singlePath = []
-                if self.plotCurrentLayer:
-                    for csp in sp:
-                        if self.bStopped:
-                            return
-                        if (self.printPortrait):
-                            fX = float(csp[1][1])  # Flipped X/Y
-                            fY = (self.svgWidth) - float(csp[1][0])
-                        else:
-                            fX = float(csp[1][0])  # Set move destination
-                            fY = float(csp[1][1])
+            # turn this path into a cubicsuperpath (list of beziers)...
 
-                        if nIndex == 0:
-                            if (plot_utils.distance(fX - self.fCurrX, fY - self.fCurrY) > idraw_conf.MIN_GAP):
-                                self.penUp()
-                                self.plotSegmentWithVelocity(fX, fY, 0, 0)
-                        elif nIndex == 1:
-                            self.penDown()
-                        # self.plotLineAndTime( fX, fY ) #Draw a segment - Legacy
-                        nIndex += 1
+            if len(simplepath.parsePath(d)) == 0:
+                return
 
-                        singlePath.append([fX, fY])
+            if self.plotCurrentLayer:
+                p = cubicsuperpath.parsePath(d)
 
-                    self.PlanTrajectory(singlePath)
+                # ...and apply the transformation to each point
+                applyTransformToPath(matTransform, p)
 
-            if (not self.bStopped):  # an "index" for resuming plots quickly-- record last complete path
-                self.svgLastPath = self.pathcount  # The number of the last path completed
-                self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
+                # p is now a list of lists of cubic beziers [control pt1, control pt2, endpoint]
+                # where the start-point is the last point in the previous segment.
+                for sp in p:
+
+                    plot_utils.subdivideCubicPath(sp, 0.02 / self.options.smoothness)
+                    nIndex = 0
+
+                    singlePath = []
+                    if self.plotCurrentLayer:
+                        for csp in sp:
+
+                            if self.bStopped:
+                                return
+                            if (self.printPortrait):
+                                fX = float(csp[1][1])  # Flipped X/Y
+                                fY = (self.svgWidth) - float(csp[1][0])
+                            else:
+                                fX = float(csp[1][0])  # Set move destination
+                                fY = float(csp[1][1])
+
+                            if nIndex == 0:
+                                if (plot_utils.distance(fX - self.fCurrX, fY - self.fCurrY) > idraw_conf.MIN_GAP):
+                                    self.penUp()
+                                    self.plotSegmentWithVelocity(fX, fY, 0, 0)
+                            elif nIndex == 1:
+                                self.penDown()
+                            # self.plotLineAndTime( fX, fY ) #Draw a segment - Legacy
+                            nIndex += 1
+
+                            singlePath.append([fX, fY])
+
+                        self.PlanTrajectory(singlePath)
+
+                if (not self.bStopped):  # an "index" for resuming plots quickly-- record last complete path
+                    self.svgLastPath = self.pathcount  # The number of the last path completed
+                    self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
 
     def PlanTrajectory(self, inputPath):
         '''
@@ -2395,8 +2410,8 @@ class WCB(inkex.Effect):
         intTemp = 5 * self.options.ServoDownSpeed
         self.command(self.serialPort, 'SC,12,' + str(intTemp) + '\r')
 
-    def stop(self):
-        self.bStopped = True
+    # def stop(self):
+    #     self.bStopped = True
 
     def getDocProps(self):
         '''
