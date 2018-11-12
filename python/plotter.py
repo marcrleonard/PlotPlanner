@@ -1,6 +1,6 @@
 import sys
 sys.path.append('.')
-from python.plotcontrol.idraw import WCB
+from python.plotcontrol.plotdriver import PlotDriver
 
 input_options = {
     # "tab": "timing",
@@ -49,14 +49,14 @@ class PlotControl():
         self.run_thread = threading.Thread(target=self._run)
         self.run_thread.start()
 
-        while self.run_thread.is_alive():
-            user_input = input()
-            if user_input == 'stop':
-                self.stop()
+        # while self.run_thread.is_alive():
+        #     user_input = input()
+        #     if user_input == 'stop':
+        #         self.stop()
 
 
     def _run(self):
-        self.operation = WCB(self.input_options, self.filename)
+        self.operation = PlotDriver(self.input_options, self.filename)
         self.operation.effect()
 
 
@@ -68,7 +68,7 @@ class PlotControl():
 
     def version(self):
         self.input_options = {'tab':'manual', 'manualType':'version-check'}
-        self.operation = WCB(self.input_options, self.filename)
+        self.operation = PlotDriver(self.input_options, self.filename)
         self.operation.effect()
 
 

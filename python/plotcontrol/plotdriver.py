@@ -54,7 +54,7 @@ N_SERVOSPEED = 50  # Default pen-lift speed
 N_DEFAULT_LAYER = 1  # Default inkscape layer
 
 
-class WCB(inkex.Effect):
+class PlotDriver(inkex.Effect):
 
     def __init__(self, input_options, filename):
 
@@ -256,6 +256,8 @@ class WCB(inkex.Effect):
         self.run=True
 
         self.getoptions(_options)
+
+        print(vars(self.options))
 
 
     # def calc_time(self):
