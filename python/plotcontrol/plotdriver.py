@@ -68,134 +68,13 @@ class Options(object):
 
 class PlotDriver(inkex.Effect):
 
-    def __init__(self, input_options, filename):
-
-        # _options = []
+    def __init__(self, filename, input_options= None):
 
         self.filename = filename
 
-        # for k, v in input_options.items():
-        #     if isinstance(v, bool):
-        #         _options.append('--{}={}'.format(k, str(v).lower()))
-        #     else:
-        #         _options.append('--{}={}'.format(k, v))
-
-        # for option in _options:
-        #     print(option)
-
-        # It unclear to me if this is necc.
-        # In the main implementation of the plugin, it needs the SVG as the last argument, but I'm pretty sure
-        # I was able to circumvent this in the effect() function. Leaving it here for now...
-        # _options.append(filename)
-
-
-
         inkex.Effect.__init__(self)
 
-
-
         self.start_time = time.time()
-
-        # self.OptionParser.add_option("--tab",
-        #                              action="store", type="string",
-        #                              dest="tab", default="controls",
-        #                              help="The active tab when Apply was pressed")
-        #
-        # self.OptionParser.add_option("--penUpPosition",
-        #                              action="store", type="int",
-        #                              dest="penUpPosition", default=N_PEN_UP_POS,
-        #                              help="Position of pen when lifted")
-        # self.OptionParser.add_option("--penDownPosition",
-        #                              action="store", type="int",
-        #                              dest="penDownPosition", default=N_PEN_DOWN_POS,
-        #                              help="Position of pen for painting")
-        # self.OptionParser.add_option("--laserPower",
-        #                              action="store", type="int",
-        #                              dest="laserPower", default=N_LASER_POWER_POS,
-        #                              help="laser Power for pin RB3 output PWM")
-        # self.OptionParser.add_option("--setupType",
-        #                              action="store", type="string",
-        #                              dest="setupType", default="controls",
-        #                              help="The active option when Apply was pressed")
-        # self.OptionParser.add_option('--serialPortName',
-        #                              action='store', type='string',
-        #                              dest='serialPortName', default="",
-        #                              help='Serial port')
-        # self.OptionParser.add_option("--penDownSpeed",
-        #                              action="store", type="int",
-        #                              dest="penDownSpeed", default=F_DEFAULT_SPEED,
-        #                              help="Speed (step/sec) while pen is down.")
-        #
-        # self.OptionParser.add_option("--rapidSpeed",
-        #                              action="store", type="int",
-        #                              dest="rapidSpeed", default=F_DEFAULT_SPEED,
-        #                              help="Rapid speed (percent) while pen is up.")
-        #
-        # self.OptionParser.add_option("--ServoUpSpeed",
-        #                              action="store", type="int",
-        #                              dest="ServoUpSpeed", default=N_SERVOSPEED,
-        #                              help="Rate of lifting pen ")
-        # self.OptionParser.add_option("--penUpDelay",
-        #                              action="store", type="int",
-        #                              dest="penUpDelay", default=N_PEN_UP_DELAY,
-        #                              help="Added delay after pen up (msec).")
-        # self.OptionParser.add_option("--ServoDownSpeed",
-        #                              action="store", type="int",
-        #                              dest="ServoDownSpeed", default=N_SERVOSPEED,
-        #                              help="Rate of lowering pen ")
-        # self.OptionParser.add_option("--penDownDelay",
-        #                              action="store", type="int",
-        #                              dest="penDownDelay", default=N_PEN_DOWN_DELAY,
-        #                              help="Added delay after pen down (msec).")
-        #
-        # self.OptionParser.add_option("--report_time",
-        #                              action="store", type="inkbool",
-        #                              dest="report_time", default=False,
-        #                              help="Report time elapsed.")
-        #
-        # self.OptionParser.add_option("--constSpeed",
-        #                              action="store", type="inkbool",
-        #                              dest="constSpeed", default=False,
-        #                              help="Use constant velocity mode when pen is down")
-        #
-        # self.OptionParser.add_option("--autoRotate",
-        #                              action="store", type="inkbool",
-        #                              dest="autoRotate", default=False,
-        #                              help="Print in portrait or landscape mode automatically")
-        #
-        # self.OptionParser.add_option("--smoothness",
-        #                              action="store", type="float",
-        #                              dest="smoothness", default=2.0,
-        #                              help="Smoothness of curves")
-        #
-        # self.OptionParser.add_option("--cornering",
-        #                              action="store", type="float",
-        #                              dest="cornering", default=2.0,
-        #                              help="cornering speed factor")
-        #
-        # self.OptionParser.add_option("--resolution",
-        #                              action="store", type="int",
-        #                              dest="resolution", default=3,
-        #                              help="Resolution factor.")
-        #
-        # self.OptionParser.add_option("--manualType",
-        #                              action="store", type="string",
-        #                              dest="manualType", default="controls",
-        #                              help="The active option when Apply was pressed")
-        # self.OptionParser.add_option("--WalkDistance",
-        #                              action="store", type="float",
-        #                              dest="WalkDistance", default=1,
-        #                              help="Distance for manual walk")
-        #
-        # self.OptionParser.add_option("--resumeType",
-        #                              action="store", type="string",
-        #                              dest="resumeType", default="controls",
-        #                              help="The active option when Apply was pressed")
-        #
-        # self.OptionParser.add_option("--layernumber",
-        #                              action="store", type="int",
-        #                              dest="layernumber", default=N_DEFAULT_LAYER,
-        #                              help="Selected layer for multilayer plotting")
 
         self.serialPort = None
         self.bPenIsUp = None  # Initial state of pen is neither up nor down, but _unknown_.
@@ -267,53 +146,18 @@ class PlotDriver(inkex.Effect):
         self.warnOutOfBounds = False
         self.run=True
 
+        # set default options
         self.options = Options()
-        # self.getoptions(_options)
+
+        # if other options are initiated, override defaults
+        if input_options:
+            self.set_options(input_options)
+
+
+    def set_options(self, input_options):
 
         for k,v in input_options.items():
-            self.options.k = v
-
-        print(vars(self.options))
-        print(len(vars(self.options)))
-
-
-    # def calc_time(self):
-    #     if self.options.report_time and (not self.called_externally):
-    #         if self.copies_to_plot == 0:  # No copies remaining to plot
-    #             if self.options.preview:
-    #                 m, s = divmod(self.pt_estimate / 1000.0, 60)
-    #                 h, m = divmod(m, 60)
-    #                 h = int(h)
-    #                 m = int(m)
-    #                 s = int(s)
-    #                 if h > 0:
-    #                     self.text_log(
-    #                         "Estimated print time: {0:d}:{1:02d}:{2:02d} (Hours, minutes, seconds)".format(h, m, s))
-    #                 else:
-    #                     self.text_log("Estimated print time: {0:02d}:{1:02d} (minutes, seconds)".format(m, s))
-    #
-    #             elapsed_time = time.time() - self.start_time
-    #             m, s = divmod(elapsed_time, 60)
-    #             h, m = divmod(m, 60)
-    #             h = int(h)
-    #             m = int(m)
-    #             s = int(s)
-    #             down_dist = 0.0254 * self.pen_down_travel_inches
-    #             tot_dist = down_dist + (0.0254 * self.pen_up_travel_inches)
-    #             if self.options.preview:
-    #                 self.text_log("Length of path to draw: {0:1.2f} m.".format(down_dist))
-    #                 self.text_log("Total movement distance: {0:1.2f} m.".format(tot_dist))
-    #                 if self.options.rendering > 0:
-    #                     self.text_log("This estimate took: {0:d}:{1:02d}:{2:02d} (Hours, minutes, seconds)".format(h, m, s))
-    #             else:
-    #                 if h > 0:
-    #                     self.text_log("Elapsed time: {0:d}:{1:02d}:{2:02d} (Hours, minutes, seconds)".format(h, m, s))
-    #                 else:
-    #                     self.text_log("Elapsed time: {0:02d}:{1:02d} (minutes, seconds)".format(m, s))
-    #                 self.text_log("Length of path drawn: {0:1.2f} m.".format(down_dist))
-    #                 self.text_log("Total distance moved: {0:1.2f} m.".format(tot_dist))
-    #
-
+            setattr(self.options, k, v)
 
 
     def effect(self):
@@ -389,7 +233,28 @@ class PlotDriver(inkex.Effect):
                 else:
                     useOldResumeData = False
                     unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
-                    self.resumePlotSetup()
+
+
+                    # self.resumePlotSetup() # I also commented out the function
+
+                    # just swapped out this if statement
+                    # for the resumePlotSetup() function above
+                    if (self.svgNodeCount_Old > 0):
+                        self.nodeTarget = self.svgNodeCount_Old
+                        self.svgLayer = self.svgLayer_Old
+                        if self.options.resumeType == "ResumeNow":
+                            self.resumeMode = True
+                        if self.serialPort is None:
+                            return
+                        self.ServoSetup()
+                        self.penUp()
+                        self.EnableMotors()  # Set plotting resolution
+                        self.fSpeed = self.options.penDownSpeed
+                        self.fCurrX = self.svgLastKnownPosX_Old + idraw_conf.StartPos_X
+                        self.fCurrY = self.svgLastKnownPosY_Old + idraw_conf.StartPos_Y
+
+
+
                     if self.resumeMode:
                         fX = self.svgPausedPosX_Old + idraw_conf.StartPos_X
                         fY = self.svgPausedPosY_Old + idraw_conf.StartPos_Y
@@ -706,31 +571,36 @@ class PlotDriver(inkex.Effect):
             strOutput = ','.join(['XM', str(duration), str(deltaA), str(deltaB)]) + '\r'
             self.command(portName, strOutput)
 
-    def resumePlotSetup(self):
-        self.LayerFound = False
-        if (self.svgLayer_Old < 101) and (self.svgLayer_Old >= 0):
-            self.options.layernumber = self.svgLayer_Old
-            self.PrintFromLayersTab = True
-            self.plotCurrentLayer = False
-            self.LayerFound = True
-        elif (self.svgLayer_Old == 12345):  # Plot all layers
-            self.PrintFromLayersTab = False
-            self.plotCurrentLayer = True
-            self.LayerFound = True
-        if (self.LayerFound):
-            if (self.svgNodeCount_Old > 0):
-                self.nodeTarget = self.svgNodeCount_Old
-                self.svgLayer = self.svgLayer_Old
-                if self.options.resumeType == "ResumeNow":
-                    self.resumeMode = True
-                if self.serialPort is None:
-                    return
-                self.ServoSetup()
-                self.penUp()
-                self.EnableMotors()  # Set plotting resolution
-                self.fSpeed = self.options.penDownSpeed
-                self.fCurrX = self.svgLastKnownPosX_Old + idraw_conf.StartPos_X
-                self.fCurrY = self.svgLastKnownPosY_Old + idraw_conf.StartPos_Y
+    # def resumePlotSetup(self):
+    #     '''this function is used to set all the params to resume a plot. It is only called in one place.'''
+    #
+    #     _LayerFound = False
+    #
+    #     # I think SVG Layer Old is the last layer done?
+    #
+    #     if (self.svgLayer_Old < 101) and (self.svgLayer_Old >= 0):
+    #         self.options.layernumber = self.svgLayer_Old
+    #         self.PrintFromLayersTab = True
+    #         self.plotCurrentLayer = False
+    #         _LayerFound = True
+    #     elif (self.svgLayer_Old == 12345):  # Plot all layers
+    #         self.PrintFromLayersTab = False
+    #         self.plotCurrentLayer = True
+    #         _LayerFound = True
+    #     if (_LayerFound):
+    #         if (self.svgNodeCount_Old > 0):
+    #             self.nodeTarget = self.svgNodeCount_Old
+    #             self.svgLayer = self.svgLayer_Old
+    #             if self.options.resumeType == "ResumeNow":
+    #                 self.resumeMode = True
+    #             if self.serialPort is None:
+    #                 return
+    #             self.ServoSetup()
+    #             self.penUp()
+    #             self.EnableMotors()  # Set plotting resolution
+    #             self.fSpeed = self.options.penDownSpeed
+    #             self.fCurrX = self.svgLastKnownPosX_Old + idraw_conf.StartPos_X
+    #             self.fCurrY = self.svgLastKnownPosY_Old + idraw_conf.StartPos_Y
 
     def CheckSVGforWCBData(self):
         self.svgDataRead = False
@@ -882,9 +752,8 @@ class PlotDriver(inkex.Effect):
                 # 				print( 'self.svgWidth:  ' + str(self.svgWidth) )
                 # 				print( 'float( vinfo[2] ):  ' + str(float( vinfo[2] ) ))
                 # 				print( 'sx:  ' + str(sx) )
-                self.svgTransform = parseTransform(
-                    'scale(%f,%f) translate(%f,%f)' % (sx, sy, -float(vinfo[0]), -float(vinfo[1])))
-        # 				print( 'svgTransform:  ' + str(self.svgTransform) )
+                self.svgTransform = parseTransform('scale(%f,%f) translate(%f,%f)' % (sx, sy, -float(vinfo[0]), -float(vinfo[1])))
+                print( 'svgTransform:  ' + str(self.svgTransform) )
 
         self.ServoSetup()
         self.penUp()
@@ -1384,69 +1253,63 @@ class PlotDriver(inkex.Effect):
     def plotPath(self, path, matTransform):
 
 
-
-        if True:
+        '''
+        Plot the path while applying the transformation defined
+        by the matrix [matTransform].
+        '''
         # if self.run:
-            # self.bStopped = True
 
+        d = path.get('d')
 
+        print('Plotting path\n{}\n--------'.format(d))
 
-            '''
-            Plot the path while applying the transformation defined
-            by the matrix [matTransform].
-            '''
+        # turn this path into a cubicsuperpath (list of beziers)...
 
-            d = path.get('d')
+        if len(simplepath.parsePath(d)) == 0:
+            return
 
-            print('Plotting path\n{}\n--------'.format(d))
+        if self.plotCurrentLayer:
+            p = cubicsuperpath.parsePath(d)
 
-            # turn this path into a cubicsuperpath (list of beziers)...
+            # ...and apply the transformation to each point
+            applyTransformToPath(matTransform, p)
 
-            if len(simplepath.parsePath(d)) == 0:
-                return
+            # p is now a list of lists of cubic beziers [control pt1, control pt2, endpoint]
+            # where the start-point is the last point in the previous segment.
+            for sp in p:
 
-            if self.plotCurrentLayer:
-                p = cubicsuperpath.parsePath(d)
+                plot_utils.subdivideCubicPath(sp, 0.02 / self.options.smoothness)
+                nIndex = 0
 
-                # ...and apply the transformation to each point
-                applyTransformToPath(matTransform, p)
+                singlePath = []
+                if self.plotCurrentLayer:
+                    for csp in sp:
 
-                # p is now a list of lists of cubic beziers [control pt1, control pt2, endpoint]
-                # where the start-point is the last point in the previous segment.
-                for sp in p:
+                        if self.bStopped:
+                            return
+                        if (self.printPortrait):
+                            fX = float(csp[1][1])  # Flipped X/Y
+                            fY = (self.svgWidth) - float(csp[1][0])
+                        else:
+                            fX = float(csp[1][0])  # Set move destination
+                            fY = float(csp[1][1])
 
-                    plot_utils.subdivideCubicPath(sp, 0.02 / self.options.smoothness)
-                    nIndex = 0
+                        if nIndex == 0:
+                            if (plot_utils.distance(fX - self.fCurrX, fY - self.fCurrY) > idraw_conf.MIN_GAP):
+                                self.penUp()
+                                self.plotSegmentWithVelocity(fX, fY, 0, 0)
+                        elif nIndex == 1:
+                            self.penDown()
+                        # self.plotLineAndTime( fX, fY ) #Draw a segment - Legacy
+                        nIndex += 1
 
-                    singlePath = []
-                    if self.plotCurrentLayer:
-                        for csp in sp:
+                        singlePath.append([fX, fY])
 
-                            if self.bStopped:
-                                return
-                            if (self.printPortrait):
-                                fX = float(csp[1][1])  # Flipped X/Y
-                                fY = (self.svgWidth) - float(csp[1][0])
-                            else:
-                                fX = float(csp[1][0])  # Set move destination
-                                fY = float(csp[1][1])
+                    self.PlanTrajectory(singlePath)
 
-                            if nIndex == 0:
-                                if (plot_utils.distance(fX - self.fCurrX, fY - self.fCurrY) > idraw_conf.MIN_GAP):
-                                    self.penUp()
-                                    self.plotSegmentWithVelocity(fX, fY, 0, 0)
-                            elif nIndex == 1:
-                                self.penDown()
-                            # self.plotLineAndTime( fX, fY ) #Draw a segment - Legacy
-                            nIndex += 1
-
-                            singlePath.append([fX, fY])
-
-                        self.PlanTrajectory(singlePath)
-
-                if (not self.bStopped):  # an "index" for resuming plots quickly-- record last complete path
-                    self.svgLastPath = self.pathcount  # The number of the last path completed
-                    self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
+            if (not self.bStopped):  # an "index" for resuming plots quickly-- record last complete path
+                self.svgLastPath = self.pathcount  # The number of the last path completed
+                self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
 
     def PlanTrajectory(self, inputPath):
         '''
@@ -2195,6 +2058,7 @@ class PlotDriver(inkex.Effect):
             if ((moveSteps1 != 0) or (moveSteps2 != 0)):  # if at least one motor step is required for this move....
 
                 if (not self.resumeMode) and (not self.bStopped):
+                    # I think this is where the move actually happens.
                     self.doXYMove(self.serialPort, moveSteps2, moveSteps1, moveTime)
                     if (moveTime > 15):
                         if self.options.tab != '"manual"':
@@ -2213,8 +2077,11 @@ class PlotDriver(inkex.Effect):
 
         # todo: Here! replace this query method with self.run. That will replace the 'stop' method to recieve input from
         # this class attribute
-        strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
-        if strButton[0] == '1':  # button pressed
+        # strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
+        # if strButton[0] == '1':  # button pressed
+
+        if not self.run:
+
             self.svgNodeCount = self.nodeCount - 1
             self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
             self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
@@ -2300,9 +2167,11 @@ class PlotDriver(inkex.Effect):
                 self.svgLastKnownPosX = self.fCurrX - idraw_conf.StartPos_X
                 self.svgLastKnownPosY = self.fCurrY - idraw_conf.StartPos_Y
 
-            strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
-            if strButton[0] == '1':  # button pressed
-                self.svgNodeCount = self.nodeCount;
+            # strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
+            # if strButton[0] == '1':  # button pressed
+
+            if not self.run:
+                self.svgNodeCount = self.nodeCount
                 self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
                 self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
                 self.penUp()
