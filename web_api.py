@@ -5,7 +5,6 @@ from flask import Flask, send_from_directory, request, jsonify
 
 from python.plotter import PlotControl
 
-BUILD_LOCATION = 'build'
 
 app = Flask(__name__, static_url_path='', static_folder='build')
 
