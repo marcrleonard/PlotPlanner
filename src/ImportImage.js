@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 
+
 class ImportImage extends Component {
     constructor(props) {
         super(props);
@@ -21,6 +22,8 @@ class ImportImage extends Component {
             // var file = event.target.files[0];
             console.log(file);
             console.log(file.name);
+
+
             // this.setState({ image: tmppath }); /// if you want to upload latter
 
             this.props.setImage(tmppath)

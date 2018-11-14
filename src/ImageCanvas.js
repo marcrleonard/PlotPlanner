@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import Draggable, { DraggableCore } from 'react-draggable'; // Both at the same time
 import SVG from 'react-inlinesvg';
+import axios from 'axios';
 
 class ImageCanvas extends Component {
     constructor(props) {
@@ -103,6 +104,45 @@ class ImageCanvas extends Component {
     }
 
 
+    plotImage(yo) {
+        console.log('plot dat shiz!')
+        let svg_ele = (this.refs.load_svg).getElementsByTagName('svg')[0]
+        console.log(svg_ele.outerHTML)
+
+
+
+
+        axios.post('/plot', {
+            'svg': `${svg_ele.outerHTML}`
+        })
+            .then((response) =>
+                console.log(response.data)
+
+            )
+    }
+
+    terminatePlot(yo) {
+
+        axios.post('/terminate', {
+        })
+            .then((response) =>
+                console.log(response.data)
+
+            )
+    }
+
+    pausePlot(yo) {
+
+        axios.post('/stop', {
+        })
+            .then((response) =>
+                console.log(response.data)
+
+            )
+    }
+
+
+
 
     render() {
 
@@ -119,6 +159,12 @@ class ImageCanvas extends Component {
                     <div className='canvasSubInfo'>
                         Layers: {this.state.imageLayers}
                     </div>
+                    <div className='navButton'>
+                        <button onClick={this.plotImage.bind(this)} name='Plot!' icon=''> Plot! </button>
+                        <button onClick={this.stopPlot.bind(this)} name='Stop!' icon=''> Stop! </button>
+
+                    </div>
+
 
                 </div>
                 <div class='underCanvas'>
@@ -131,7 +177,7 @@ class ImageCanvas extends Component {
                                 <Proxy select="#Star" fill="red" />
                             </Samy> */}
                                 <SVG
-                                    ref='load_svg'
+                                    ref='load_svg_svg'
                                     src={this.props.svgImage}
                                     // preloader={<Loader />}
                                     wrapper={React.createFactory('div')}
