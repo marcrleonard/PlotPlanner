@@ -22,6 +22,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 import sys
+import io
 sys.path.append('.')
 
 import time
@@ -68,7 +69,7 @@ class Options(object):
 
 class PlotDriver(inkex.Effect):
 
-    def __init__(self, filename, input_options= None):
+    def __init__(self, filename=None, input_options= None, svg_string = None):
 
         self.filename = filename
 
@@ -86,7 +87,7 @@ class PlotDriver(inkex.Effect):
         self.fCurrX = idraw_conf.StartPos_X
         self.fCurrY = idraw_conf.StartPos_Y
         self.ptFirst = (idraw_conf.StartPos_X, idraw_conf.StartPos_Y)
-        self.bStopped = False
+        # self.bStopped = False
         self.fSpeed = 1
         self.resumeMode = False
         self.nodeCount = int(0)  # NOTE: python uses 32-bit ints.
@@ -144,7 +145,15 @@ class PlotDriver(inkex.Effect):
         # which elements have received a warning
         self.warnings = {}
         self.warnOutOfBounds = False
+
         self.run=True
+        self.terminate = False
+        self.timeEst = 0.0
+        self.current_path = None
+
+        self.busy = False
+
+        self.svg_string = svg_string
 
         # set default options
         self.options = Options()
@@ -163,85 +172,100 @@ class PlotDriver(inkex.Effect):
     def effect(self):
         '''Main entry point: check to see which tab is selected, and act accordingly.'''
 
-        import sys
-        if self.filename != None:
-            try:
-                stream = open(self.filename, 'r')
-            except Exception:
-                print("Unable to open specified file: %s" % self.filename)
-                sys.exit()
+        self.busy = True
 
-        # If it wasn't specified, try to open the file specified as
-        # an object member
-        # elif self.svg_file != None:
-        #     try:
-        #         stream = open(self.svg_file, 'r')
-        #     except Exception:
-        #         print("Unable to open object member file: %s" % self.svg_file)
-        #         sys.exit()
+        try:
 
-        # Finally, if the filename was not specified anywhere, use
-        # standard input stream
-        # else:
-        #     stream = sys.stdin
 
-        p = etree.XMLParser(huge_tree=True)
-        self.document = etree.parse(stream, parser=p)
-        self.original_document = copy.deepcopy(self.document)
-        stream.close()
+            if self.filename != None:
+                try:
+                    with open(self.filename, 'r') as stream:
+                        p = etree.XMLParser(huge_tree=True)
+                        self.document = etree.parse(stream, parser=p)
 
-        self.svg = self.document.getroot()
-        self.CheckSVGforWCBData()
-        useOldResumeData = True
 
-        skipSerial = False
-        if (self.options.tab == 'Help'):
-            skipSerial = True
-        if (self.options.tab == 'options'):
-            skipSerial = True
-        if (self.options.tab == 'timing'):
-            skipSerial = True
+                except Exception:
+                    print("Unable to open specified file: %s" % self.filename)
+                    sys.exit()
 
-        print(self.options)
+            if self.svg_string:
 
-        if skipSerial == False:
+                stream = self.svg_string
+                f = io.StringIO(stream)
 
-            # axidraw uses `self.serialPort = self.serial_connect()`
-            # this might be a better way to connect to the serial port.
+                p = etree.XMLParser(huge_tree=True)
+                self.document = etree.parse(f, parser=p)
 
-            # self.serialPort = self.serial_connect()
+            # If it wasn't specified, try to open the file specified as
+            # an object member
+            # elif self.svg_file != None:
+            #     try:
+            #         stream = open(self.svg_file, 'r')
+            #     except Exception:
+            #         print("Unable to open object member file: %s" % self.svg_file)
+            #         sys.exit()
 
-            self.serialPort = self.openPort()
-            if self.serialPort is None:
-                print("Failed to connect to AxiDraw. :(")
+            # Finally, if the filename was not specified anywhere, use
+            # standard input stream
+            # else:
+            #     stream = sys.stdin
 
-            if self.options.tab == 'splash':
-                self.LayersFoundToPlot = False
-                useOldResumeData = False
-                self.PrintFromLayersTab = False
-                self.plotCurrentLayer = True
-                if self.serialPort is not None:
-                    self.svgNodeCount = 0
-                    self.svgLastPath = 0
-                    unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
-                    self.svgLayer = 12345  # indicate (to resume routine) that we are plotting all layers.
-                    self.plotDocument()
 
-            elif self.options.tab == 'resume':
+            self.original_document = copy.deepcopy(self.document)
+            self.svg = self.document.getroot()
+            self.CheckSVGforWCBData()
+            useOldResumeData = True
+
+            skipSerial = False
+            if (self.options.tab == 'Help'):
+                skipSerial = True
+            if (self.options.tab == 'options'):
+                skipSerial = True
+            if (self.options.tab == 'timing'):
+                skipSerial = True
+
+            print(self.options)
+
+            if skipSerial == False:
+
+                # axidraw uses `self.serialPort = self.serial_connect()`
+                # this might be a better way to connect to the serial port.
+
+                # self.serialPort = self.serial_connect()
+
+                self.serialPort = self.openPort()
                 if self.serialPort is None:
-                    useOldResumeData = True
-                else:
+                    print("Failed to connect to AxiDraw. :(")
+
+                if self.options.tab == 'splash':
+                    self.LayersFoundToPlot = False
                     useOldResumeData = False
-                    unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
+                    self.PrintFromLayersTab = False
+                    self.plotCurrentLayer = True
+                    if self.serialPort is not None:
+                        self.svgNodeCount = 0
+                        self.svgLastPath = 0
+                        unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
+                        self.svgLayer = 12345  # indicate (to resume routine) that we are plotting all layers.
+                        self.plotDocument()
+
+                elif self.options.tab == 'resume':
+                    if self.serialPort is None:
+                        useOldResumeData = True
+                    else:
+                        useOldResumeData = False
+                        unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
 
 
-                    # self.resumePlotSetup() # I also commented out the function
+                        # self.resumePlotSetup() # I also commented out the function
 
-                    # just swapped out this if statement
-                    # for the resumePlotSetup() function above
-                    if (self.svgNodeCount_Old > 0):
-                        self.nodeTarget = self.svgNodeCount_Old
-                        self.svgLayer = self.svgLayer_Old
+                        # just swapped out this if statement
+                        # for the resumePlotSetup() function above
+                        # if (self.svgNodeCount_Old > 0):
+
+                        # self.nodeTarget = self.svgNodeCount_Old
+
+                        # self.svgLayer = self.svgLayer_Old
                         if self.options.resumeType == "ResumeNow":
                             self.resumeMode = True
                         if self.serialPort is None:
@@ -255,84 +279,90 @@ class PlotDriver(inkex.Effect):
 
 
 
-                    if self.resumeMode:
-                        fX = self.svgPausedPosX_Old + idraw_conf.StartPos_X
-                        fY = self.svgPausedPosY_Old + idraw_conf.StartPos_Y
-                        self.resumeMode = False
+                        if self.resumeMode:
+                            fX = self.svgPausedPosX_Old + idraw_conf.StartPos_X
+                            fY = self.svgPausedPosY_Old + idraw_conf.StartPos_Y
+                            self.resumeMode = False
 
-                        self.plotSegmentWithVelocity(fX, fY, 0, 0)
+                            self.plotSegmentWithVelocity(fX, fY, 0, 0)
 
-                        self.resumeMode = True
-                        self.nodeCount = 0
+                            self.resumeMode = True
+                            self.nodeCount = 0
+                            self.plotDocument()
+
+                        elif (self.options.resumeType == "justGoHome"):
+                            fX = idraw_conf.StartPos_X
+                            fY = idraw_conf.StartPos_Y
+
+                            self.plotSegmentWithVelocity(fX, fY, 0, 0)
+
+                            # New values to write to file:
+                            self.svgNodeCount = self.svgNodeCount_Old
+                            self.svgLastPath = self.svgLastPath_Old
+                            self.svgLastPathNC = self.svgLastPathNC_Old
+                            self.svgPausedPosX = self.svgPausedPosX_Old
+                            self.svgPausedPosY = self.svgPausedPosY_Old
+                            self.svgLayer = self.svgLayer_Old
+
+
+                        else:
+                            print("There does not seem to be any in-progress plot to resume.")
+
+                elif self.options.tab == 'layers':
+                    useOldResumeData = False
+                    self.PrintFromLayersTab = True
+                    self.plotCurrentLayer = False
+                    self.LayersFoundToPlot = False
+                    self.svgLastPath = 0
+                    if self.serialPort is not None:
+                        unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
+                        self.svgNodeCount = 0
+                        self.svgLayer = self.options.layernumber
                         self.plotDocument()
 
-                    elif (self.options.resumeType == "justGoHome"):
-                        fX = idraw_conf.StartPos_X
-                        fY = idraw_conf.StartPos_Y
+                elif self.options.tab == 'setup':
+                    self.setupCommand()
 
-                        self.plotSegmentWithVelocity(fX, fY, 0, 0)
-
-                        # New values to write to file:
+                elif self.options.tab == 'manual':
+                    if self.options.manualType == "strip-data":
+                        for node in self.svg.xpath('//svg:WCB', namespaces=inkex.NSS):
+                            self.svg.remove(node)
+                        for node in self.svg.xpath('//svg:eggbot', namespaces=inkex.NSS):
+                            self.svg.remove(node)
+                        print(
+                            "I've removed all AxiDraw data from this SVG file. Have a great day!")
+                        return
+                    else:
+                        useOldResumeData = False
                         self.svgNodeCount = self.svgNodeCount_Old
                         self.svgLastPath = self.svgLastPath_Old
                         self.svgLastPathNC = self.svgLastPathNC_Old
                         self.svgPausedPosX = self.svgPausedPosX_Old
                         self.svgPausedPosY = self.svgPausedPosY_Old
                         self.svgLayer = self.svgLayer_Old
+                        self.manualCommand()
 
+            if (useOldResumeData):  # Do not make any changes to data saved from SVG file.
+                self.svgNodeCount = self.svgNodeCount_Old
+                self.svgLastPath = self.svgLastPath_Old
+                self.svgLastPathNC = self.svgLastPathNC_Old
+                self.svgPausedPosX = self.svgPausedPosX_Old
+                self.svgPausedPosY = self.svgPausedPosY_Old
+                self.svgLayer = self.svgLayer_Old
+                self.svgLastKnownPosX = self.svgLastKnownPosX_Old
+                self.svgLastKnownPosY = self.svgLastKnownPosY_Old
 
-                    else:
-                        print("There does not seem to be any in-progress plot to resume.")
+            self.svgDataRead = False
+            self.UpdateSVGWCBData(self.svg)
+            if self.serialPort is not None:
+                self.doTimedPause(self.serialPort, 10)  # Pause a moment for underway commands to finish...
+                self.closePort(self.serialPort)
 
-            elif self.options.tab == 'layers':
-                useOldResumeData = False
-                self.PrintFromLayersTab = True
-                self.plotCurrentLayer = False
-                self.LayersFoundToPlot = False
-                self.svgLastPath = 0
-                if self.serialPort is not None:
-                    unused_button = self.QueryPRGButton(self.serialPort)  # Query if button pressed
-                    self.svgNodeCount = 0
-                    self.svgLayer = self.options.layernumber
-                    self.plotDocument()
+        except Exception as e:
+            print('Top level exception: {}'.format(e))
 
-            elif self.options.tab == 'setup':
-                self.setupCommand()
-
-            elif self.options.tab == 'manual':
-                if self.options.manualType == "strip-data":
-                    for node in self.svg.xpath('//svg:WCB', namespaces=inkex.NSS):
-                        self.svg.remove(node)
-                    for node in self.svg.xpath('//svg:eggbot', namespaces=inkex.NSS):
-                        self.svg.remove(node)
-                    print(
-                        "I've removed all AxiDraw data from this SVG file. Have a great day!")
-                    return
-                else:
-                    useOldResumeData = False
-                    self.svgNodeCount = self.svgNodeCount_Old
-                    self.svgLastPath = self.svgLastPath_Old
-                    self.svgLastPathNC = self.svgLastPathNC_Old
-                    self.svgPausedPosX = self.svgPausedPosX_Old
-                    self.svgPausedPosY = self.svgPausedPosY_Old
-                    self.svgLayer = self.svgLayer_Old
-                    self.manualCommand()
-
-        if (useOldResumeData):  # Do not make any changes to data saved from SVG file.
-            self.svgNodeCount = self.svgNodeCount_Old
-            self.svgLastPath = self.svgLastPath_Old
-            self.svgLastPathNC = self.svgLastPathNC_Old
-            self.svgPausedPosX = self.svgPausedPosX_Old
-            self.svgPausedPosY = self.svgPausedPosY_Old
-            self.svgLayer = self.svgLayer_Old
-            self.svgLastKnownPosX = self.svgLastKnownPosX_Old
-            self.svgLastKnownPosY = self.svgLastKnownPosY_Old
-
-        self.svgDataRead = False
-        self.UpdateSVGWCBData(self.svg)
-        if self.serialPort is not None:
-            self.doTimedPause(self.serialPort, 10)  # Pause a moment for underway commands to finish...
-            self.closePort(self.serialPort)
+        finally:
+            self.busy = False
 
     def version(self):
         return "0.3"  # Version number for this document
@@ -765,7 +795,7 @@ class PlotDriver(inkex.Effect):
             self.penUp()  # Always end with pen-up
 
             # return to home after end of normal plot
-            if ((not self.bStopped) and (self.ptFirst)):
+            if ((self.run) and (self.ptFirst)):
                 self.xBoundsMin = idraw_conf.StartPos_X
                 self.yBoundsMin = idraw_conf.StartPos_Y
                 fX = self.ptFirst[0]
@@ -773,7 +803,7 @@ class PlotDriver(inkex.Effect):
                 self.nodeCount = self.nodeTarget
                 self.plotSegmentWithVelocity(fX, fY, 0, 0)
 
-            if (not self.bStopped):
+            if (self.run):
                 if (self.options.tab == 'splash') or (self.options.tab == 'layers') or (
                         self.options.tab == 'resume'):
                     self.svgLayer = 0
@@ -795,9 +825,17 @@ class PlotDriver(inkex.Effect):
             m, s = divmod(elapsed_time, 60)
             h, m = divmod(m, 60)
             print("Elapsed time: %d:%02d:%02d" % (h, m, s) + " (Hours, minutes, seconds)")
+
+            print('Time seconds {}'.format(self.timeEst))
+
+            # print('Time calculated: {}'.format())
+
             self.sendDisableMotors()  # diaable motor
 
             print('all operations complete.')
+            print('setting self.run=False')
+            self.run = False
+
 
         finally:
             # We may have had an exception and lost the serial port...
@@ -1261,6 +1299,9 @@ class PlotDriver(inkex.Effect):
 
         d = path.get('d')
 
+        id = path.get('id', None)
+        self.current_path = id
+
         print('Plotting path\n{}\n--------'.format(d))
 
         # turn this path into a cubicsuperpath (list of beziers)...
@@ -1285,8 +1326,9 @@ class PlotDriver(inkex.Effect):
                 if self.plotCurrentLayer:
                     for csp in sp:
 
-                        if self.bStopped:
-                            return
+                        if not self.run:
+                            self.resume()
+
                         if (self.printPortrait):
                             fX = float(csp[1][1])  # Flipped X/Y
                             fY = (self.svgWidth) - float(csp[1][0])
@@ -1307,9 +1349,40 @@ class PlotDriver(inkex.Effect):
 
                     self.PlanTrajectory(singlePath)
 
-            if (not self.bStopped):  # an "index" for resuming plots quickly-- record last complete path
+            if (self.run):  # an "index" for resuming plots quickly-- record last complete path
+
+
+
+
                 self.svgLastPath = self.pathcount  # The number of the last path completed
                 self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
+
+                print('Index: {}'.format(self.svgLastPath))
+                print('Segment Count? {}'.format(self.svgLastPathNC))
+
+    def resume(self):
+        while not self.run:
+            if not self.virtualPenIsUp:
+                self.penUp()
+
+            if self.terminate:
+                self.ptFirst = [0, 0]
+                self.penUp()
+
+                fX = idraw_conf.StartPos_X
+                fY = idraw_conf.StartPos_Y
+                self.run = True
+                self.plotSegmentWithVelocity(fX, fY, 0, 0)
+
+                self.sendDisableMotors()
+                sys.exit()
+
+            time.sleep(1)
+
+        if self.virtualPenIsUp:
+            self.penDown()
+
+
 
     def PlanTrajectory(self, inputPath):
         '''
@@ -1331,8 +1404,9 @@ class PlotDriver(inkex.Effect):
         if spewTrajectoryDebugData:
             print('\nPlanTrajectory()\n')
 
-        if self.bStopped:
-            return
+        if not self.run:
+            self.resume()
+
         if (self.fCurrX is None):
             return
 
@@ -1631,8 +1705,9 @@ class PlotDriver(inkex.Effect):
         if (self.options.constSpeed and not self.virtualPenIsUp):
             ConstantVelMode = True
 
-        if self.bStopped:
-            return
+        if not self.run:
+            self.resume()
+
         if (self.fCurrX is None):
             return
 
@@ -1720,7 +1795,7 @@ class PlotDriver(inkex.Effect):
         destArray1 = array('i')  # signed integer
         destArray2 = array('i')  # signed integer
 
-        timeElapsed = 0.0
+        timeElapsed = 0.0 # Is this the time?!??!!?
         position = 0.0
         velocity = initialVel
 
@@ -2057,7 +2132,7 @@ class PlotDriver(inkex.Effect):
 
             if ((moveSteps1 != 0) or (moveSteps2 != 0)):  # if at least one motor step is required for this move....
 
-                if (not self.resumeMode) and (not self.bStopped):
+                if (not self.resumeMode) and (self.run):
                     # I think this is where the move actually happens.
                     self.doXYMove(self.serialPort, moveSteps2, moveSteps1, moveTime)
                     if (moveTime > 15):
@@ -2081,15 +2156,16 @@ class PlotDriver(inkex.Effect):
         # if strButton[0] == '1':  # button pressed
 
         if not self.run:
-
             self.svgNodeCount = self.nodeCount - 1
             self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
             self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
             self.penUp()
             print('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
             print('Use the "resume" feature to continue.')
-            self.bStopped = True
-            return
+            # self.bStopped = True
+
+        self.timeEst = self.timeEst + timeElapsed
+
 
     def plotLineAndTime(self, xDest, yDest):
         '''
@@ -2107,8 +2183,8 @@ class PlotDriver(inkex.Effect):
             if (xBounded or yBounded):
                 self.warnOutOfBounds = True
 
-        if self.bStopped:
-            return
+        if not self.run:
+            self.resume()
         if (self.fCurrX is None):
             return
 
@@ -2155,7 +2231,7 @@ class PlotDriver(inkex.Effect):
                     if (not self.virtualPenIsUp):
                         self.penDown()
 
-            if (not self.resumeMode) and (not self.bStopped):
+            if (not self.resumeMode) and (self.run):
                 self.doXYMove(self.serialPort, motorSteps2, motorSteps1, nTime)
                 if (nTime > 60):
                     if self.options.tab != '"manual"':
@@ -2170,15 +2246,15 @@ class PlotDriver(inkex.Effect):
             # strButton = self.QueryPRGButton(self.serialPort)  # Query if button pressed
             # if strButton[0] == '1':  # button pressed
 
-            if not self.run:
-                self.svgNodeCount = self.nodeCount
-                self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
-                self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
-                self.penUp()
-                print('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
-                print('Use the "resume" feature to continue.')
-                self.bStopped = True
-                return
+            # if not self.run:
+            #     self.svgNodeCount = self.nodeCount
+            #     self.svgPausedPosX = self.fCurrX - idraw_conf.StartPos_X  # self.svgLastKnownPosX
+            #     self.svgPausedPosY = self.fCurrY - idraw_conf.StartPos_Y  # self.svgLastKnownPosY
+            #     self.penUp()
+            #     print('Plot paused by button press after node number ' + str(self.nodeCount) + '.')
+            #     print('Use the "resume" feature to continue.')
+            #     # self.bStopped = True
+            #     return
 
     def EnableMotors(self):
         '''
@@ -2234,7 +2310,7 @@ class PlotDriver(inkex.Effect):
     def penDown(self):
         self.virtualPenIsUp = False  # Virtual pen keeps track of state for resuming plotting.
         if (self.bPenIsUp != False):  # skip if pen is already down
-            if ((not self.resumeMode) and (not self.bStopped)):  # skip if resuming or stopped
+            if ((not self.resumeMode) and (self.run)):  # skip if resuming or stopped
                 vDistance = float(self.options.penUpPosition - self.options.penDownPosition)
                 vTime = int((1000.0 * vDistance) / self.options.ServoDownSpeed)
                 if (vTime < 0):  # Handle case that penDownPosition is above penUpPosition
@@ -2324,3 +2400,19 @@ class PlotDriver(inkex.Effect):
 
 
 
+    def status(self):
+        status = 'running ' #if self.run:
+
+        if not self.run:
+            status = 'paused'
+
+            if self.terminate:
+                status = 'terminating'
+
+        rv = {
+            'busy': self.busy,
+            'plot_index': self.svgLastPath,
+            'status': status
+        }
+
+        return rv
