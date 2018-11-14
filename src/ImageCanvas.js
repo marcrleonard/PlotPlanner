@@ -7,7 +7,7 @@ class ImageCanvas extends Component {
     constructor(props) {
         super(props)
         this.state = {
-            svgImage: '',
+            svgImage: null,
             imageWidth: '-',
             imageHeight: '-',
             imageLayers: 0,
@@ -103,42 +103,62 @@ class ImageCanvas extends Component {
 
     }
 
+    imageLoaded() {
+        let rv = false
+        if (this.state.svgImage) {
+            rv = false
+        }
+        return rv
+    }
 
-    plotImage(yo) {
-        console.log('plot dat shiz!')
-        let svg_ele = (this.refs.load_svg).getElementsByTagName('svg')[0]
-        console.log(svg_ele.outerHTML)
+
+
+    plotImage() {
+
+        if (this.imageLoaded()) {
+            console.log('plot dat shiz!')
+            let svg_ele = (this.refs.load_svg).getElementsByTagName('svg')[0]
+            console.log(svg_ele.outerHTML)
 
 
 
 
-        axios.post('/plot', {
-            'svg': `${svg_ele.outerHTML}`
-        })
-            .then((response) =>
-                console.log(response.data)
+            axios.post('/plot', {
+                'svg': `${svg_ele.outerHTML}`
+            })
+                .then((response) =>
+                    console.log(response.data)
 
-            )
+                )
+
+        }
+        else {
+            console.log('naw')
+        }
+
+
     }
 
     terminatePlot(yo) {
+        if (this.imageLoaded()) {
+            axios.post('/terminate', {
+            })
+                .then((response) =>
+                    console.log(response.data)
 
-        axios.post('/terminate', {
-        })
-            .then((response) =>
-                console.log(response.data)
-
-            )
+                )
+        }
     }
 
     pausePlot(yo) {
+        if (this.imageLoaded()) {
+            axios.post('/pause', {
+            })
+                .then((response) =>
+                    console.log(response.data)
 
-        axios.post('/stop', {
-        })
-            .then((response) =>
-                console.log(response.data)
-
-            )
+                )
+        }
     }
 
 
@@ -161,13 +181,15 @@ class ImageCanvas extends Component {
                     </div>
                     <div className='navButton'>
                         <button onClick={this.plotImage.bind(this)} name='Plot!' icon=''> Plot! </button>
-                        <button onClick={this.stopPlot.bind(this)} name='Stop!' icon=''> Stop! </button>
+                        <button onClick={this.pausePlot.bind(this)} name='Stop!' icon=''> Pause! </button>
+                        <button onClick={this.terminatePlot.bind(this)} name='Stop!' icon=''> Termiante! </button>
+
 
                     </div>
 
 
                 </div>
-                <div class='underCanvas'>
+                <div className='underCanvas'>
                     <Draggable>
                         <div className='imageCanvas'>
 

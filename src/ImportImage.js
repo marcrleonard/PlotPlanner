@@ -37,7 +37,7 @@ class ImportImage extends Component {
             <div className='heroButton'>
                 <div
                     label="Open File"
-                    primary={false}
+                    primary={false.toString()}
                     onClick={() => { this.upload.click() }}>
                     {this.props.name}
                     <input id="myInput"

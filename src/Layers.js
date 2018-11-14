@@ -10,7 +10,7 @@ class Layers extends Component {
     }
 
     componentDidMount() {
-        console.log(this.props.setImage)
+        // console.log(this.props.setImage)
     }
 
     render() {
