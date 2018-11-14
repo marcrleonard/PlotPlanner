@@ -25,8 +25,8 @@ def ping():
 def plot():
     svg_str = (request.json.get('svg', None))
     pc.setup_file(svg_string=svg_str)
-    pc.run()
-    return jsonify(True)
+    rv  = pc.run()
+    return jsonify(rv)
 
 @app.route('/terminate', methods=['POST'])
 def stop():
