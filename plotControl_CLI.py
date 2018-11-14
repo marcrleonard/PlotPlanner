@@ -1,14 +1,26 @@
-
 import click
 
+from python.plotter import PlotControl
+
 @click.command()
-@click.option('--count', default=1, help='Number of greetings.')
-@click.option('--name', prompt='Your name',
-              help='The person to greet.')
-def hello(count, name):
-    """Simple program that greets NAME for a total of COUNT times."""
-    for x in range(count):
-        click.echo('Hello %s!' % name)
+
+# add args here...
+@click.option('--svg', prompt='SVG Location', help='The location of the svg to plot', default=None)
+def setup(svg):
+
+    # todo: check location of svg
+    if svg == None:
+        click.echo('No file provided.')
+
+    pc = PlotControl()
+
+    pc.setup_file(svg_string=svg)
+    rv = pc.run()
+
+    if rv:
+        click.echo('Running SVG')
+    else:
+        click.echo('Error!')
 
 if __name__ == '__main__':
-    hello()
+    setup()
