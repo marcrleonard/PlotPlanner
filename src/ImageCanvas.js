@@ -73,7 +73,8 @@ class ImageCanvas extends Component {
         }
         this.setState({
             imageLayers: numLayers,
-            layerIds: layerIds
+            layerIds: layerIds,
+            svgImage: svg
         })
 
     }
@@ -106,7 +107,7 @@ class ImageCanvas extends Component {
     imageLoaded() {
         let rv = false
         if (this.state.svgImage) {
-            rv = false
+            rv = true
         }
         return rv
     }
