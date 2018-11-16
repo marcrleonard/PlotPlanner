@@ -2,6 +2,9 @@
 .vscode
 .idea
 
+# python
+*.pyc
+
 
 # dependencies
 /node_modules
