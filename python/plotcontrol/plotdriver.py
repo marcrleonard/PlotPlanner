@@ -224,7 +224,7 @@ class PlotDriver(inkex.Effect):
             if (self.options.tab == 'timing'):
                 skipSerial = True
 
-            print(self.options)
+            # print(self.options)
 
             if skipSerial == False:
 
@@ -235,7 +235,7 @@ class PlotDriver(inkex.Effect):
 
                 self.serialPort = self.openPort()
                 if self.serialPort is None:
-                    print("Failed to connect to AxiDraw. :(")
+                    print("Failed to connect to plotter. :-(")
 
                 if self.options.tab == 'splash':
                     self.LayersFoundToPlot = False
@@ -362,6 +362,7 @@ class PlotDriver(inkex.Effect):
             print('Top level exception: {}'.format(e))
 
         finally:
+            self.terminate = True
             self.busy = False
 
     def version(self):
@@ -446,7 +447,7 @@ class PlotDriver(inkex.Effect):
         # serialPort = ebb_serial.testPort(foundPort)
         serialPort = self.testPort(foundPort)
 
-        print(serialPort)
+        # print(serialPort)
 
         if serialPort:
             return serialPort
@@ -1302,7 +1303,7 @@ class PlotDriver(inkex.Effect):
         id = path.get('id', None)
         self.current_path = id
 
-        print('Plotting path\n{}\n--------'.format(d))
+        print('Plotting path id: {}\n{}\n--------'.format(id, d))
 
         # turn this path into a cubicsuperpath (list of beziers)...
 
@@ -2412,6 +2413,7 @@ class PlotDriver(inkex.Effect):
         rv = {
             'busy': self.busy,
             'plot_index': self.svgLastPath,
+            'current_path': self.current_path,
             'status': status
         }
 
