@@ -1,26 +1,48 @@
 import click
 
+import os
+
+
 from python.plotter import PlotControl
 
-@click.command()
+pc = PlotControl()
 
-# add args here...
-@click.option('--svg', prompt='SVG Location', help='The location of the svg to plot', default=None)
-def setup(svg):
 
-    # todo: check location of svg
-    if svg == None:
-        click.echo('No file provided.')
+@click.group('cli')
+def cli():
+    """Manages CLI."""
 
-    pc = PlotControl()
 
-    pc.setup_file(svg_string=svg)
-    rv = pc.run()
+@cli.command('plot')
+@click.argument('file')
+def plotcommand(file=None):
+    """/path/to/file.svg"""
 
-    if rv:
-        click.echo('Running SVG')
+    if not os.path.exists(file):
+        click.echo('Files does not exist. Provide full path.')
     else:
-        click.echo('Error!')
+        click.echo('path to plot {}'.format(file))
+
+        pc.run(filename=file)
+
+
+@cli.group('setup')
+def setup():
+    """Run Setup commands"""
+
+
+@setup.command('connection')
+def connection():
+    """(will return the status of the plotter connection)"""
+
+    rv = 'No plotter found :-('
+    connection = pc.check_connection()
+    if connection:
+        rv = 'Connection found:\n{}'.format(connection)
+
+    click.echo(rv)
+
 
 if __name__ == '__main__':
-    setup()
+
+    cli()
