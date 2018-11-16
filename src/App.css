@@ -66,7 +66,7 @@
 
 .imageCanvas, svg{
 /* width:85%; */
-margin: 20px;
+/* margin: 20px; */
 background-color:white;
 }
 
@@ -74,6 +74,12 @@ background-color:white;
   width:200px;
   background-color: #2E3D48
 }
+
+.canvasPadding {
+  padding:20px;
+}
+
+
 
 
 @keyframes App-logo-spin {
