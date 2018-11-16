@@ -7,77 +7,29 @@ class ImageCanvas extends Component {
     constructor(props) {
         super(props)
         this.state = {
-            svgImage: null,
+            svgImage: '',
             imageWidth: '-',
             imageHeight: '-',
             imageLayers: 0,
-            layerIds: []
+            layerIds: [],
+            plotting: true
         }
 
-        this.loadLayer = this.loadLayer.bind(this);
+
         this.myOnLoadHandler = this.myOnLoadHandler.bind(this);
     }
 
 
-    componentDidUpdate() {
-        // this.setState({
-        //     imageHeight: this.props.svgImage.height,
-        //     imageWidth: this.props.svgImage.width
-        // })
+    componentDidMount() {
 
-        // function waitForImageToLoad(imageElement) {
-        //     return new Promise(resolve => { imageElement.onload = resolve })
-        // }
-
-
-        // waitForImageToLoad(this.refs.load_svg).then(() => {
-        //     // Image have loaded.
-
-        //     var object = this.refs.load_svg;
-
-        //     let out = object.childNodes;
-        //     console.log(out)
-        //     console.log('Loaded lol')
-
-        //     // console.log(svgDoc)
-
-        // });
-
-
+        this.timer = setInterval(() => this.plotStatus(), 2000);
     }
 
-    loadLayer(svg) {
-
-        let supported_elements = ['path', 'circle', 'rect', 'line']
-
-        let numLayers = 0;
-        let layerIds = [];
-
-
-        for (let ele of supported_elements) {
-
-            let paths = svg.getElementsByTagName(ele)
-            console.log(paths)
-            for (let path of paths) {
-                path.setAttribute("id", 'pp_layer_' + numLayers);
-
-                // might need this?
-                //  path.setAttribute("ref", 'pp_layer_' + numLayers);
-
-                numLayers += 1
-                layerIds.push(path.id)
-            }
-
-
-
-        }
-        this.setState({
-            imageLayers: numLayers,
-            layerIds: layerIds,
-            svgImage: svg
-        })
-
+    componentWillUnmount() {
+        this.timer = null; // here...
     }
+
+
 
     myOnLoadHandler() {
         let svgContainer = this.refs.load_svg
@@ -95,12 +47,44 @@ class ImageCanvas extends Component {
         }
 
         this.setState({
-            // svgImage: svg_ele,
             imageHeight: height,
             imageWidth: width
         })
 
-        this.loadLayer(svg_ele);
+        ///////////////////
+
+        let supported_elements = ['path', 'circle', 'rect', 'line']
+
+        let numLayers = 0;
+        let layerIds = [];
+
+
+        for (let ele of supported_elements) {
+
+            let paths = svg_ele.getElementsByTagName(ele)
+            for (let path of paths) {
+                path.setAttribute("id", 'pp_layer_' + numLayers);
+
+                // might need this?
+                //  path.setAttribute("ref", 'pp_layer_' + numLayers);
+
+                numLayers += 1
+                layerIds.push(path.id)
+            }
+
+
+
+        }
+
+        let location = document.getElementById('loaded_Svg')
+        location.appendChild(svg_ele)
+        // console.log(svg_ele)
+
+        this.setState({
+            imageLayers: numLayers,
+            layerIds: layerIds,
+            // svgImage: svg
+        })
 
     }
 
@@ -116,49 +100,83 @@ class ImageCanvas extends Component {
 
     plotImage() {
 
-        if (this.imageLoaded()) {
-            console.log('plot dat shiz!')
-            let svg_ele = (this.refs.load_svg).getElementsByTagName('svg')[0]
-            console.log(svg_ele.outerHTML)
+        console.log('plot dat shiz!')
+        let svg_ele = (document.getElementById('loaded_Svg')).firstChild
+        // let svg_ele = (this.refs.load_svg).getElementsByTagName('svg')[0]
+        console.log(svg_ele)
 
 
 
 
-            axios.post('/plot', {
-                'svg': `${svg_ele.outerHTML}`
-            })
-                .then((response) =>
-                    console.log(response.data)
-
+        axios.post('/plot', {
+            'svg': `${svg_ele.outerHTML}`
+        })
+            .then((response) =>
+                this.setState({
+                    'plotting': response.data
+                }
                 )
-
-        }
-        else {
-            console.log('naw')
-        }
+            )
 
 
     }
 
     terminatePlot(yo) {
-        if (this.imageLoaded()) {
-            axios.post('/terminate', {
-            })
-                .then((response) =>
-                    console.log(response.data)
+        axios.post('/terminate', {
+        })
+            .then((response) =>
+                console.log(response.data)
 
-                )
+            )
+
+    }
+
+    plotStatus(yo) {
+        axios.post('/status', {
+        })
+            .then((response) =>
+                this.setHighlight(response.data)
+            )
+
+    }
+
+    setHighlight(data) {
+        try {
+            let ele = document.getElementById(data.current_path)
+            ele.setAttribute("style", 'stroke-width:20px;');
         }
+        catch (e) {
+            console.log('error setting class')
+            console.log(e)
+        }
+
     }
 
     pausePlot(yo) {
-        if (this.imageLoaded()) {
-            axios.post('/pause', {
-            })
-                .then((response) =>
-                    console.log(response.data)
+        axios.post('/pause', {
+        })
+            .then((response) =>
+                console.log(response.data)
 
-                )
+            )
+
+    }
+
+    getSVG() {
+
+        if (this.state.svgImage) {
+            let svgContainer = this.refs.load_svg
+            return svgContainer.getElementsByTagName('svg')[0]
+        }
+        else {
+            return <svg width={617} height={316}>
+                <g>
+                    <rect x="400" y="40" width="100" height="200" fill="#4286f4" stroke="#f4f142" />
+                    <circle cx="108" cy="108.5" r="100" fill="#0ff" stroke="#0ff" />
+                    <circle cx="180" cy="209.5" r="100" fill="#ff0" stroke="#ff0" />
+                    <circle cx="220" cy="109.5" r="100" fill="#f0f" stroke="#f0f" />
+                </g>
+            </svg>
         }
     }
 
@@ -166,6 +184,11 @@ class ImageCanvas extends Component {
 
 
     render() {
+
+        if (!this.props.plotting) {
+            console.log('status...')
+            this.plotStatus()
+        }
 
 
         return (
@@ -182,8 +205,8 @@ class ImageCanvas extends Component {
                     </div>
                     <div className='navButton'>
                         <button onClick={this.plotImage.bind(this)} name='Plot!' icon=''> Plot! </button>
-                        <button onClick={this.pausePlot.bind(this)} name='Stop!' icon=''> Pause! </button>
-                        <button onClick={this.terminatePlot.bind(this)} name='Stop!' icon=''> Termiante! </button>
+                        <button onClick={this.pausePlot.bind(this)} name='Pause!' icon=''> Pause! </button>
+                        <button onClick={this.terminatePlot.bind(this)} name='Terminate!' icon=''> Termiante! </button>
 
 
                     </div>
@@ -191,35 +214,28 @@ class ImageCanvas extends Component {
 
                 </div>
                 <div className='underCanvas'>
+
+                    <div hidden ref='load_svg'>
+                        <SVG
+                            ref='load_svg_svg'
+                            src={this.props.svgImage}
+                            // preloader={<Loader />}
+                            wrapper={React.createFactory('div')}
+                            onLoad={() => { // (src) can actually go into this callback, which is handy.
+                                this.myOnLoadHandler();
+                            }}
+                            className='embeddedImage'
+                        >
+                        </SVG>
+
+
+
+
+
+
+                    </div>
                     <Draggable>
-                        <div className='imageCanvas'>
-
-                            <div ref='load_svg'>
-
-                                {/* <Samy path={this.props.svgImage}>
-                                <Proxy select="#Star" fill="red" />
-                            </Samy> */}
-                                <SVG
-                                    ref='load_svg_svg'
-                                    src={this.props.svgImage}
-                                    // preloader={<Loader />}
-                                    wrapper={React.createFactory('div')}
-                                    onLoad={() => { // (src) can actually go into this callback, which is handy.
-                                        this.myOnLoadHandler();
-
-                                    }}
-                                    className='embeddedImage'
-                                >
-                                    {/* Here's some optional content for browsers that don't support XHR or inline
-                                SVGs. You can use other React components here too. Here, I'll show you.
-                                <img src={this.props.svgImage} /> */}
-                                </SVG>
-
-                                {/* <object className='embeddedImage' data={this.props.svgImage} type="image/svg+xml" ref='load_svg' /> */}
-
-                            </div>
-
-
+                        <div className='imageCanvas' id='loaded_Svg'>
 
                         </div>
                     </Draggable>
