@@ -24,8 +24,7 @@ class PlotControl(object):
         self.svg_string = None
         self.filename = None
 
-        if interactive:
-            self.input_supervisor()
+        self.interactive = interactive
 
     def check_connection(self):
         rv = True
@@ -88,6 +87,10 @@ class PlotControl(object):
             self._run_thread = threading.Thread(target=self._run)
             self._run_thread.start()
             rv = True
+
+        if self.interactive:
+            self.input_supervisor()
+
 
         return rv
 
