@@ -63,6 +63,7 @@ class Options(object):
         self.ServoUpSpeed = 50  # Default pen-lift speed
         self.ServoDownSpeed = 50  # Default pen-lift speed
         self.autoRotate = True
+        self.debugOutput = False
 
 
 
@@ -784,7 +785,9 @@ class PlotDriver(inkex.Effect):
                 # 				print( 'float( vinfo[2] ):  ' + str(float( vinfo[2] ) ))
                 # 				print( 'sx:  ' + str(sx) )
                 self.svgTransform = parseTransform('scale(%f,%f) translate(%f,%f)' % (sx, sy, -float(vinfo[0]), -float(vinfo[1])))
-                print( 'svgTransform:  ' + str(self.svgTransform) )
+
+                if self.options.debugOutput:
+                    print( 'svgTransform:  ' + str(self.svgTransform) )
 
         self.ServoSetup()
         self.penUp()
@@ -1303,7 +1306,8 @@ class PlotDriver(inkex.Effect):
         id = path.get('id', None)
         self.current_path = id
 
-        print('Plotting path id: {}\n{}\n--------'.format(id, d))
+        if self.options.debugOutput:
+            print('Plotting path id: {}\n{}\n--------'.format(id, d))
 
         # turn this path into a cubicsuperpath (list of beziers)...
 
@@ -1358,8 +1362,9 @@ class PlotDriver(inkex.Effect):
                 self.svgLastPath = self.pathcount  # The number of the last path completed
                 self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
 
-                print('Index: {}'.format(self.svgLastPath))
-                print('Segment Count? {}'.format(self.svgLastPathNC))
+                if self.options.debugOutput:
+                    print('Index: {}'.format(self.svgLastPath))
+                    print('Segment Count? {}'.format(self.svgLastPathNC))
 
     def resume(self):
         while not self.run:
@@ -2175,8 +2180,8 @@ class PlotDriver(inkex.Effect):
         Important note: Everything up to this point uses *inch* scale.
         Here, we convert to actual motor steps, w/ set DPI.
         '''
-
-        print('PlotLine: x, y: ' + str(xDest) + ', ' + str(yDest))
+        if self.options.debugOutput:
+            print('PlotLine: x, y: ' + str(xDest) + ', ' + str(yDest))
 
         if (self.ignoreLimits == False):
             xDest, xBounded = plot_utils.checkLimits(xDest, self.xBoundsMin, self.xBoundsMax)
@@ -2389,7 +2394,9 @@ class PlotDriver(inkex.Effect):
         '''
         self.svgHeight = plot_utils.getLengthInches(self, 'height')
         self.svgWidth = plot_utils.getLengthInches(self, 'width')
-        print('SVG dimensions: {}x{} (this has been converted to inches)'.format(self.svgHeight, self.svgWidth))
+
+        if self.options.debugOutput:
+            print('SVG dimensions: {}x{} (this has been converted to inches)'.format(self.svgHeight, self.svgWidth))
 
         if (self.options.autoRotate) and (self.svgHeight > self.svgWidth):
             print('Portrait.')
