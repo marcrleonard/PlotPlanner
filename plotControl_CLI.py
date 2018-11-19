@@ -2,10 +2,12 @@ import click
 
 import os
 
+#python3 plotControl_CLI.py plot /Users/marcleonard/Projects/p5/marc_circles.svg
+
 
 from python.plotter import PlotControl
 
-pc = PlotControl()
+pc = PlotControl(interactive=True)
 
 
 @click.group('cli')
