@@ -1,13 +1,10 @@
-PlotPlanner
------------
-
 What is it?
-===========
+-------
 
 This is a fork of a few existing projects to create a better interface to work with pen plotters. The idea is to have both a GUI, and a command line interface. I am trying to circumvent Inkscape, and create a simple way to use a pen plotter with SVGs.
 
 What's it made of?
-=================
+--------
 
 This project is broken into two parts:
 
@@ -24,7 +21,7 @@ This project is broken into two parts:
     
 
 Where is it now?
-====================
+------
 
 *Front end:*
 
