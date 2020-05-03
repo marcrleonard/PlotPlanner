@@ -1,10 +1,10 @@
-##PlotPlanner
-
-####What is it?
+What is it?
+-------
 
 This is a fork of a few existing projects to create a better interface to work with pen plotters. The idea is to have both a GUI, and a command line interface. I am trying to circumvent Inkscape, and create a simple way to use a pen plotter with SVGs.
 
-####What's it made of?
+What's it made of?
+--------
 
 This project is broken into two parts:
 
@@ -20,7 +20,8 @@ This project is broken into two parts:
     - Allow it to be used as a module. I've taken inspiration from how Axidraw has written their module.  
     
 
-####Where is it now?
+Where is it now?
+------
 
 *Front end:*
 
@@ -35,7 +36,8 @@ This project is broken into two parts:
 - I've replaced the 'argparse' mess. Now you can give it a dictionary of settings, and it will set it's own custom `option` class
 
 
-####Todo:
+Todo:
+=======
 - Add full fledged CLI
 - Add a way to replace text with hershey text
 - Remove all unnecessary files. The python folder is basically a clone of the inkscape extensions folder. 
