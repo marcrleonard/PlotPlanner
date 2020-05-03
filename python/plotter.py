@@ -61,12 +61,14 @@ class PlotControl(object):
             input_options = {
                 # "tab": "timing",
                 "tab": "splash",
-                "penUpPosition": 20,
+                "penUpPosition": 5, # lower is higher?
+                # "penUpPosition": 20, # lower is higher?
                 "penDownPosition": 50,  # this is the movement ACTUALLY drawing
                 # "laserPower": 50,
                 # "setupType": 'align-mode',
                 "penDownSpeed": 20,  # this is the movement when NOT drawing
-                "rapidSpeed": 50,
+                "rapidSpeed": 70,
+                # "rapidSpeed": 50,
                 "ServoUpSpeed": 40,
                 "penUpDelay": 0,
                 "ServoDownSpeed": 40,
@@ -76,7 +78,8 @@ class PlotControl(object):
                 # "report_time": True,
                 "resolution": 1,
                 "smoothness": 10,
-                "cornering": 10,
+                # "cornering": 10,
+                "cornering": 20,
                 "manualType": 'none',
                 "WalkDistance": 1,
                 "resumeType": 'ResumeNow',
@@ -108,7 +111,7 @@ class PlotControl(object):
             if user_input == 'run':
                 self.run()
 
-            if user_input == 'pause':
+            elif user_input == 'pause':
                 self.pause()
 
             elif user_input == 'resume':
@@ -130,6 +133,7 @@ class PlotControl(object):
 
             self.pause()
             self.driver.terminate=True
+            self.driver.sendDisableMotors()
             rv  = True
 
         return rv
@@ -164,10 +168,11 @@ class PlotControl(object):
 if __name__ == '__main__':
 
     # pc = PlotControl(svg_string=svg_string, interactive=True)
-    filename = '/Users/marcleonard/Projects/plotplanner/python/tree_test_text.svg'
+    filename = '/Users/marcleonard/Projects/P5/Favs/output_38_1.svg'
+    # filename = '/Users/marcleonard/Projects/plotplanner/python/tree_test_text.svg'
 
     pc = PlotControl()
     pc.check_connection()
     # pc.setup_file(filename=filename)
-# pc.version()
-#     pc.run()
+    # pc.version()
+    pc.run(filename=filename)

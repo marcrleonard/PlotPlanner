@@ -12,7 +12,8 @@ class ImageCanvas extends Component {
             imageHeight: '-',
             imageLayers: 0,
             layerIds: [],
-            plotting: true
+            plotting: true,
+            pathsPlotted :0
         }
 
 
@@ -65,8 +66,10 @@ class ImageCanvas extends Component {
             for (let path of paths) {
                 path.setAttribute("id", 'pp_layer_' + numLayers);
 
-                // might need this?
-                //  path.setAttribute("ref", 'pp_layer_' + numLayers);
+                path.setAttribute('stroke', 'grey')
+                path.setAttribute("stroke-opacity", '.5');
+
+                path.onclick = function() { alert('blah'); };
 
                 numLayers += 1
                 layerIds.push(path.id)
@@ -129,6 +132,8 @@ class ImageCanvas extends Component {
 
             )
 
+        this.setState({plotting:false})
+
     }
 
     plotStatus(yo) {
@@ -141,13 +146,36 @@ class ImageCanvas extends Component {
     }
 
     setHighlight(data) {
+        console.log(data)
         try {
             let ele = document.getElementById(data.current_path)
-            ele.setAttribute("style", 'stroke-width:20px;');
+            if (ele){
+                ele.setAttribute("stroke", 'green');
+                ele.setAttribute("stroke-width", '4');
+                ele.setAttribute("stroke-opacity", '1');
+            }
+            console.log('set current path.')
+            // ele.setAttribute("style", 'stroke-style:#FF0000;');
+
+            // ele.setAttribute("style", 'stroke-width:20px;');
         }
         catch (e) {
             console.log('error setting class')
             console.log(e)
+        }
+
+        console.log('setting paths..')
+
+        for (let path_id of data.completed_paths){
+            let ele = document.getElementById(path_id)
+            ele.setAttribute("stroke", 'black');
+            ele.setAttribute("stroke-width", '1');
+            ele.setAttribute("stroke-opacity", '1');
+        }
+        console.log('done setting paths')
+
+        if (data.completed_paths.length > 0){
+                    this.setState({pathsPlotted : data.completed_paths.length})
         }
 
     }
@@ -185,10 +213,10 @@ class ImageCanvas extends Component {
 
     render() {
 
-        if (!this.props.plotting) {
-            console.log('status...')
-            this.plotStatus()
-        }
+        // if (!this.props.plotting) {
+        //     console.log('status...')
+        //     this.plotStatus()
+        // }
 
 
         return (
@@ -211,6 +239,9 @@ class ImageCanvas extends Component {
 
                     </div>
 
+                    <div className='canvasSubInfo'>
+                        Paths Plotted: {this.state.pathsPlotted} of {this.state.imageLayers}
+                    </div>
 
                 </div>
                 <div className='underCanvas'>
@@ -234,7 +265,7 @@ class ImageCanvas extends Component {
 
 
                     </div>
-                    <Draggable>
+                    <Draggable >
                         <div className='imageCanvas' id='loaded_Svg'>
 
                         </div>

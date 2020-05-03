@@ -80,6 +80,16 @@ background-color:white;
 }
 
 
+path{
+    pointer-events:all;
+}
+
+path:hover{
+    stroke:black;
+    stroke-width: 4;
+}
+
+
 
 
 @keyframes App-logo-spin {

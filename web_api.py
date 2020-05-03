@@ -22,7 +22,7 @@ def ping():
     return jsonify('pong')
 
 @app.route('/check_plotter')
-def ping():
+def check_plotter():
     rv = pc.check_connection()
     return jsonify(rv)
 
@@ -50,4 +50,4 @@ def status():
 
 
 if __name__ == '__main__':
-    app.run(use_reloader=False, port=5000, threaded=True)
+    app.run(use_reloader=False, port=5001, threaded=True)

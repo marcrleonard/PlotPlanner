@@ -151,6 +151,7 @@ class PlotDriver(inkex.Effect):
         self.terminate = False
         self.timeEst = 0.0
         self.current_path = None
+        self.completed_paths = []
 
         self.busy = False
 
@@ -1354,10 +1355,9 @@ class PlotDriver(inkex.Effect):
 
                     self.PlanTrajectory(singlePath)
 
+
+
             if (self.run):  # an "index" for resuming plots quickly-- record last complete path
-
-
-
 
                 self.svgLastPath = self.pathcount  # The number of the last path completed
                 self.svgLastPathNC = self.nodeCount  # the node count after the last path was completed.
@@ -1365,6 +1365,13 @@ class PlotDriver(inkex.Effect):
                 if self.options.debugOutput:
                     print('Index: {}'.format(self.svgLastPath))
                     print('Segment Count? {}'.format(self.svgLastPathNC))
+
+        self.completed_paths.append(self.current_path)
+        self.current_path = None
+
+    # @property
+    # def percentage_segment_complete(self):
+    #     self.svgLastPathNC
 
     def resume(self):
         while not self.run:
@@ -2421,6 +2428,7 @@ class PlotDriver(inkex.Effect):
             'busy': self.busy,
             'plot_index': self.svgLastPath,
             'current_path': self.current_path,
+            'completed_paths': self.completed_paths,
             'status': status
         }
 
