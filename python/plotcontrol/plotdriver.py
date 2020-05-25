@@ -176,6 +176,10 @@ class PlotDriver(inkex.Effect):
 
         self.busy = True
 
+        self.timeEst = 0.0
+        self.current_path = None
+        self.completed_paths = []
+
         try:
 
 

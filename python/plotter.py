@@ -102,6 +102,12 @@ class PlotControl(object):
         self.driver.run = True
         self.driver.effect()
 
+        self.complete_run()
+
+    def complete_run(self):
+        # This function will 'clear out' everything.
+        self.driver.current_path = None
+        self.driver.completed_paths = []
 
 
     def input_supervisor(self):
@@ -135,6 +141,7 @@ class PlotControl(object):
             self.driver.terminate=True
             self.driver.sendDisableMotors()
             rv  = True
+            self.complete_run()
 
         return rv
 

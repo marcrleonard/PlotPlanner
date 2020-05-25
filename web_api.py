@@ -2,11 +2,13 @@ import os
 import sys
 sys.path.append('.')
 from flask import Flask, send_from_directory, request, jsonify
-
+from flask_cors import CORS
 from python.plotter import PlotControl
 
 
 app = Flask(__name__, static_url_path='', static_folder='build')
+
+cors = CORS(app)
 
 pc = PlotControl(interactive=False)
 
