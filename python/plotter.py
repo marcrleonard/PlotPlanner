@@ -26,15 +26,6 @@ class PlotControl(object):
 
         self.interactive = interactive
 
-    def check_connection(self):
-        rv = True
-        connection = self.driver.openPort()
-        if not connection:
-            rv = False
-            # print('No plotter found :-(')
-
-        return rv
-
 
     def set_options(self, options):
         self.driver.set_options(options)
@@ -55,13 +46,13 @@ class PlotControl(object):
 
         rv = False
 
-        status = self.status()
+        status = self.connection()
         if not status['busy']:
 
             input_options = {
                 # "tab": "timing",
                 "tab": "splash",
-                "penUpPosition": 5, # lower is higher?
+                "penUpPosition": 10, # lower is higher?
                 # "penUpPosition": 20, # lower is higher?
                 "penDownPosition": 50,  # this is the movement ACTUALLY drawing
                 # "laserPower": 50,
@@ -127,7 +118,7 @@ class PlotControl(object):
                 self.terminate()
 
             elif user_input == 'status':
-                self.status()
+                self.connection()
 
     def pause(self):
         self.driver.run = False
@@ -149,7 +140,12 @@ class PlotControl(object):
 
 
     def status(self):
-        rv = self.driver.status()
+        rv = self.driver.plot_status()
+
+        return rv
+
+    def connection(self):
+        rv = self.driver.connection()
 
         return rv
 

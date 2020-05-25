@@ -16,17 +16,13 @@ pc = PlotControl(interactive=False)
 @app.route('/')
 # @app.route('/<path:path>')
 def serve(path=''):
-    return send_from_directory('build','index.html')
+    return send_from_directory('dist','index.html')
 
 
 @app.route('/ping')
 def ping():
     return jsonify('pong')
 
-@app.route('/check_plotter')
-def check_plotter():
-    rv = pc.check_connection()
-    return jsonify(rv)
 
 @app.route('/plot', methods=['POST'])
 def plot():
@@ -44,11 +40,22 @@ def pause():
     rv = pc.pause()
     return jsonify(rv)
 
+@app.route('/resume', methods=['POST'])
+def resume():
+    rv = pc.resume()
+    return jsonify(rv)
+
 
 @app.route('/status', methods=['POST'])
 def status():
     rv = pc.status()
     return jsonify(rv)
+
+@app.route('/connection', methods=['POST'])
+def connection():
+    rv = pc.connection()
+    return jsonify(rv)
+
 
 
 if __name__ == '__main__':

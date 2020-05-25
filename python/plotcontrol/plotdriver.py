@@ -2417,23 +2417,43 @@ class PlotDriver(inkex.Effect):
         else:
             return True
 
+    def connection(self):
+        connected = False
 
+        if self.busy:
+            connected = True
 
-    def status(self):
-        status = 'running ' #if self.run:
+        else:
+            if self.openPort():
+                connected = True
 
-        if not self.run:
-            status = 'paused'
+        return {
+            'connected':connected,
+            'busy': self.busy
+        }
 
-            if self.terminate:
-                status = 'terminating'
+    def plot_status(self):
+        # status = 'running ' #if self.run:
+
+        # if not self.run:
+        #     status = 'paused'
+        #
+        #     if self.terminate:
+        #         status = 'terminating'
 
         rv = {
-            'busy': self.busy,
+            # 'busy': self.busy,
             'plot_index': self.svgLastPath,
             'current_path': self.current_path,
             'completed_paths': self.completed_paths,
-            'status': status
+            # 'status': status
         }
 
         return rv
+
+if __name__ == '__main__':
+    c = PlotDriver()
+    resp = c.version()
+
+    # resp  =c.findPort()
+    print(resp)
