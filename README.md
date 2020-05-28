@@ -8,7 +8,7 @@ What's it made of?
 
 This project is broken into two parts:
 
-1. A front end interface made in React. The main features are:
+1. A front end interface made in Vue. The main features are:
     - Loaded an SVG
     - Send it to be plotted (either locally, or through the network)
     - Show meaningful plot progress
@@ -28,6 +28,7 @@ Where is it now?
 - The front end can load an SVG and display it
 - It can plot the loaded SVG
 - Pause, Resume, and Terminate actions work
+- Meaningful progress via UI highlighting
 
 *Back end:*
 
@@ -36,13 +37,14 @@ Where is it now?
 - I've replaced the 'argparse' mess. Now you can give it a dictionary of settings, and it will set it's own custom `option` class
 
 
-Todo:
+Todos:
 =======
-- Add full fledged CLI
+- Add the svg-sort functionality to the backend.
+    - Need a verification that the sort it 'ok' or should the changes be reverted
+- Add settings page (and test all the settings)
+- Add multiple passes (groups... maybe abide by the <g> tags?)
 - Add a way to replace text with hershey text
 - Remove all unnecessary files. The python folder is basically a clone of the inkscape extensions folder. 
-- Test all the settings
-- Create a better validator for the settings.
-- In the FE - add multiple passes, hooks, and other handy actions.
+- Add full fledged CLI
 
 
