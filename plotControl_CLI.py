@@ -37,9 +37,11 @@ def setup():
 def connection():
     """(will return the status of the plotter connection)"""
 
-    rv = 'No plotter found :-('
-    connection = pc.check_connection()
-    if connection:
+    connection = pc.connection()
+
+    if connection['connected'] == False:
+        rv = 'No plotter found :-('
+    else:
         rv = 'Connection found:\n{}'.format(connection)
 
     click.echo(rv)
