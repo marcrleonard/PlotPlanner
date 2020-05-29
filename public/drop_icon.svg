@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 179">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        stroke: #dbdbdb;
+        stroke-width: 6px;
+      }
+
+      .cls-2 {
+        fill: #39a8c9;
+      }
+
+      .cls-3 {
+        fill: #dbdbdb;
+      }
+    </style>
+  </defs>
+  <g id="Symbol_2_1" data-name="Symbol 2 – 1" transform="translate(-858.5 -408)">
+    <path id="Path_5" data-name="Path 5" class="cls-1" d="M0,0H202.658" transform="translate(858.5 584)"/>
+    <path id="Path_6" data-name="Path 6" class="cls-1" d="M0,87V0" transform="translate(861.5 497)"/>
+    <path id="Path_2" data-name="Path 2" class="cls-2" d="M0,89.717V0" transform="translate(1059.5 497)"/>
+    <line id="Line_5" data-name="Line 5" class="cls-1" y1="118" transform="translate(960.5 408)"/>
+    <path id="Path_3" data-name="Path 3" class="cls-3" d="M41,41,0,0" transform="translate(919.5 485)"/>
+    <path id="Path_4" data-name="Path 4" class="cls-1" d="M0,43,43,0" transform="translate(958.5 485)"/>
+  </g>
+</svg>

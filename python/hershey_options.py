@@ -1,0 +1,2 @@
+{'action': 'render', 'text': 'ginkle', 'fontface': 'futuram', 'tab': '"splash"'}
+['hershey.py', '--tab="splash"', '--text=ginkle', '--action=render', '--fontface=futuram', '/var/folders/1k/xx21gsm51jl9kvxw1rsmjfn40000gn/T/ink_ext_XXXXXX.svgSAYJSZ']
