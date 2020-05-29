@@ -21,10 +21,27 @@
 
 <style scoped>
 
-    .svg-container{
-        border:6px solid #DBDBDB;
+        #svgContainer >>> svg {
+        width: 100%;
+        height: auto;
+    }
+
+    #svgContainer >>> path {
+        fill: none;
+        stroke: black;
+
+    }
+
+    #svgContainer >>> path:hover {
+        stroke: black;
+        stroke-width: 4;
+    }
+
+    .svg-container {
+        border: 6px solid #DBDBDB;
         background-color: white;
     }
+
 
     .button-container {
         display: flex;

@@ -1,7 +1,19 @@
+![](./demo.gif)
+
 What is it?
 -------
+This is a web interface to load SVGs and plot them. It features a MUCH better interface than what is currently out there (**cough** inkscape **cough**).
+It includes a few other pieces of tooling to make a great experice:
+- svg-sort (https://github.com/inconvergent/svgsort)
+- applytransforms (https://github.com/Klowner/inkscape-applytransforms)
+- axidraw driver (https://github.com/evil-mad/axidraw/tree/master/inkscape%20driver)
 
-This is a fork of a few existing projects to create a better interface to work with pen plotters. The idea is to have both a GUI, and a command line interface. I am trying to circumvent Inkscape, and create a simple way to use a pen plotter with SVGs.
+What plotters does it support?
+-----------------------------
+Good question. Not entirely sure ;-)
+
+I use it on a chinese axidraw knock off. Presumably it also works on the axidraw. However... I think the driver it's using
+is an old version... so that needs to be updated. Though this is a tricky thing to do, as I have hacked the inkscape file. It would be best to use the `pip install` version of the driver. 
 
 What's it made of?
 --------
@@ -10,42 +22,23 @@ This project is broken into two parts:
 
 1. A front end interface made in Vue. The main features are:
     - Loaded an SVG
+    - Optimize the SVG for efficient plotting
+    - Properly center/pad the SVG
     - Send it to be plotted (either locally, or through the network)
-    - Show meaningful plot progress
+    - Show meaningful plot progress (with UI representation)
 
 2. Interface to the backend via http (Python Flask)    
 
-3. `PlotControl` module backend. This is a fork/overhauled version of iDraw inkscape extension.
-    - Provide a simpler interface to change settings. Currently, it relies on argparse. I've obscured this so now you can use a dictionary.
-    - Allow it to be used as a module. I've taken inspiration from how Axidraw has written their module.  
-    
-
-Where is it now?
-------
-
-*Front end:*
-
-- The front end can load an SVG and display it
-- It can plot the loaded SVG
-- Pause, Resume, and Terminate actions work
-- Meaningful progress via UI highlighting
-
-*Back end:*
-
-- The backend has been cleaned of python2. 
-- It has been 'modulized'. So you can call the python module directly via the rest api or as a class
-- I've replaced the 'argparse' mess. Now you can give it a dictionary of settings, and it will set it's own custom `option` class
-
 
 Todos:
-=======
-- Add the svg-sort functionality to the backend.
-    - Need a verification that the sort it 'ok' or should the changes be reverted
-    - Add Apply Transformations before sort https://github.com/Klowner/inkscape-applytransforms/
-- Add settings page (and test all the settings)
+------
+- Better styling and font hierarchy (ESPECIALLY on the Prepare Page)
+- Migrate plot driver to the axidraw `pip` version
+- 'Download' button of optimized SVG
+- Add plotter settings page (and test all the settings)
 - Add multiple passes (groups... maybe abide by the <g> tags?)
+- Plot one 'selected' path (partial implemented. Not working) 
 - Add a way to replace text with hershey text
 - Remove all unnecessary files. The python folder is basically a clone of the inkscape extensions folder. 
-- Add full fledged CLI (mostly functional... with very limited options.)
 
 

@@ -202,7 +202,8 @@
        .pause-button{
         color:#FCFCFC;
         font-size: 42px;
-        background: #f1d927;
+        background: #39a8c9;
+        /*background: #f1d927;*/
         text-align: center;
         /*width:125px;*/
         height:50px;
