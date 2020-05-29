@@ -171,7 +171,7 @@ class PlotDriver(inkex.Effect):
             setattr(self.options, k, v)
 
 
-    def effect(self):
+    def effect(self, document=None):
         '''Main entry point: check to see which tab is selected, and act accordingly.'''
 
         self.busy = True
@@ -182,8 +182,18 @@ class PlotDriver(inkex.Effect):
 
         try:
 
+            if document:
+                self.document = document
 
-            if self.filename != None:
+            elif self.svg_string:
+
+                stream = self.svg_string
+                f = io.StringIO(stream)
+
+                p = etree.XMLParser(huge_tree=True)
+                self.document = etree.parse(f, parser=p)
+
+            elif self.filename != None:
                 try:
                     with open(self.filename, 'r') as stream:
                         p = etree.XMLParser(huge_tree=True)
@@ -193,28 +203,6 @@ class PlotDriver(inkex.Effect):
                 except Exception:
                     print("Unable to open specified file: %s" % self.filename)
                     sys.exit()
-
-            if self.svg_string:
-
-                stream = self.svg_string
-                f = io.StringIO(stream)
-
-                p = etree.XMLParser(huge_tree=True)
-                self.document = etree.parse(f, parser=p)
-
-            # If it wasn't specified, try to open the file specified as
-            # an object member
-            # elif self.svg_file != None:
-            #     try:
-            #         stream = open(self.svg_file, 'r')
-            #     except Exception:
-            #         print("Unable to open object member file: %s" % self.svg_file)
-            #         sys.exit()
-
-            # Finally, if the filename was not specified anywhere, use
-            # standard input stream
-            # else:
-            #     stream = sys.stdin
 
 
             self.original_document = copy.deepcopy(self.document)

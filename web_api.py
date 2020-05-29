@@ -51,6 +51,14 @@ def status():
     rv = pc.status()
     return jsonify(rv)
 
+@app.route('/optimize', methods=['POST'])
+def optimize():
+    svg_str = (request.json.get('svg', None))
+    optimize_args = (request.json.get('args', None))
+    rv = pc.optimize(svg_str, optimize_args)
+    return jsonify(rv)
+
+
 @app.route('/connection', methods=['POST'])
 def connection():
     rv = pc.connection()

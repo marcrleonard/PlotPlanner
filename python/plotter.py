@@ -1,9 +1,11 @@
 import sys
 import time
+import io
+from lxml import etree
 
 sys.path.append('.')
 from python.plotcontrol.plotdriver import PlotDriver
-
+from python.svg_sort_interface import main as optimize_main
 
 
 # e = WCB(input_options, filename = '/Users/marcleonard/Desktop/Poster_v3_A3.ai.svg')
@@ -21,19 +23,89 @@ class PlotControl(object):
 
         self.driver = PlotDriver()
 
-        self.svg_string = None
+        # self._svg_string = None
         self.filename = None
 
         self.interactive = interactive
+
+
+    @property
+    def svg_string(self):
+        svg= ''
+        with open(self.filename, 'r') as f:
+            svg = f.read()
+
+        return svg
+
+    def flatten_transformations(self, svg_str=None):
+        from python.applytransforms import applytransforms
+
+        ss = applytransforms.ApplyTransform(svg_str)
+        ss.effect()
+        # print(ss.document)
+        # print(ss.original_document)
+        # print(ss)
+        # from lxml import etree
+        # print(etree.tostring(ss.original_document.getroot(), pretty_print=True).decode())
+        # print(etree.tostring(ss.document.getroot(), pretty_print=True).decode())
+
+        return ss.output_string
+
+    def optimize(self, svg_str=None, incoming_args=None):
+
+        if not svg_str:
+            svg_str = self.svg_string
+
+        svg_str = self.flatten_transformations(svg_str)
+
+
+        args = {
+                 '--dim': incoming_args.get('paperSize', 'A3'),
+                 '--no-adjust': not incoming_args.get('centerPaths', True),
+                 '--no-sort': False,
+                 '--no-split': False,
+                 '--pad': incoming_args.get('padding', '0'), #str?
+                 '--pad-abs': True,
+                 '--pen-moves': False,
+                 '--repeat': False,
+                 '--rnd': False,
+                 '--split-all': False,
+                 '--sw': '1.0',
+                'preserve_orientation': incoming_args.get('preserverOrientation', 'True'),
+                 '<in>': svg_str,
+                 '<out>': 'dummy.svg'
+        }
+
+
+        rv = optimize_main(args, return_string=False)
+
+        return rv
+
 
 
     def set_options(self, options):
         self.driver.set_options(options)
 
     def run(self, filename=None, svg_string=None):
+        svg_document = None
+        if filename:
+            try:
+                with open(filename, 'r') as stream:
+                    p = etree.XMLParser(huge_tree=True)
+                    svg_document = etree.parse(stream, parser=p)
+
+            except Exception:
+                print("Unable to open specified file: %s" % filename)
+                sys.exit()
+
+        if svg_string:
+            f = io.StringIO(svg_string)
+            p = etree.XMLParser(huge_tree=True)
+            svg_document = etree.parse(f, parser=p)
 
         self.filename = filename
-        self.svg_string = svg_string
+        # self.svg_string = svg_string
+
 
         if svg_string:
             self.driver.svg_string = self.svg_string
@@ -78,7 +150,7 @@ class PlotControl(object):
 
             }
             self.set_options(input_options)
-            self._run_thread = threading.Thread(target=self._run)
+            self._run_thread = threading.Thread(target=self._run, args=(svg_document,))
             self._run_thread.start()
             rv = True
 
@@ -88,10 +160,10 @@ class PlotControl(object):
 
         return rv
 
-    def _run(self):
+    def _run(self, document=None):
         self.driver.terminate = False
         self.driver.run = True
-        self.driver.effect()
+        self.driver.effect(document)
 
         self.complete_run()
 
@@ -171,11 +243,16 @@ class PlotControl(object):
 if __name__ == '__main__':
 
     # pc = PlotControl(svg_string=svg_string, interactive=True)
-    filename = '/Users/marcleonard/Projects/P5/Favs/output_38_1.svg'
+    filename = '/Users/marcleonard/Projects/plotplanner/svgs/tree.svg'
     # filename = '/Users/marcleonard/Projects/plotplanner/python/tree_test_text.svg'
 
     pc = PlotControl()
-    pc.check_connection()
+    pc.filename = filename
+
+    # pc.flatten_transformations()
+
+    pc.optimize()
+    # pc.check_connection()
     # pc.setup_file(filename=filename)
     # pc.version()
     pc.run(filename=filename)

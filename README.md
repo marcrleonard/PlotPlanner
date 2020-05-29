@@ -41,10 +41,11 @@ Todos:
 =======
 - Add the svg-sort functionality to the backend.
     - Need a verification that the sort it 'ok' or should the changes be reverted
+    - Add Apply Transformations before sort https://github.com/Klowner/inkscape-applytransforms/
 - Add settings page (and test all the settings)
 - Add multiple passes (groups... maybe abide by the <g> tags?)
 - Add a way to replace text with hershey text
 - Remove all unnecessary files. The python folder is basically a clone of the inkscape extensions folder. 
-- Add full fledged CLI
+- Add full fledged CLI (mostly functional... with very limited options.)
 
 
