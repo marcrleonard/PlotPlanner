@@ -29,9 +29,16 @@ This project is broken into two parts:
 
 2. Interface to the backend via http (Python Flask)    
 
+Installation
+------------
+`npm i`
+`pip install` dependencies (ack! don't have a requirements.txt file yet!)
+`python3 web_api.py` (backend)
+`npm run server` (front end)
 
 Todos:
 ------
+- Figure out how to distribute. PyInstaller? Electron?
 - Better styling and font hierarchy (ESPECIALLY on the Prepare Page)
 - Migrate plot driver to the axidraw `pip` version
 - 'Download' button of optimized SVG
