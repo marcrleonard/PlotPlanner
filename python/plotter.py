@@ -98,17 +98,17 @@ class PlotControl(object):
                 print("Unable to open specified file: %s" % filename)
                 sys.exit()
 
-        if svg_string:
-            f = io.StringIO(svg_string)
-            p = etree.XMLParser(huge_tree=True)
-            svg_document = etree.parse(f, parser=p)
+        # if svg_string:
+        #     f = io.StringIO(svg_string)
+        #     p = etree.XMLParser(huge_tree=True)
+        #     svg_document = etree.parse(f, parser=p)
 
         self.filename = filename
         # self.svg_string = svg_string
 
 
         if svg_string:
-            self.driver.svg_string = self.svg_string
+            self.driver.svg_string = svg_string
         elif filename:
             self.driver.filename = self.filename
 
