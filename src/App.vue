@@ -73,6 +73,22 @@
         },
         router: router,
 
+        mounted: function () {
+
+            console.log('mounted.')
+
+             window.setInterval(() => {
+
+                let resp = this.$api.connection()
+                resp.then((response) =>
+
+                    this.$store.commit('setPlotterStatus', response.data)
+                )
+
+
+            }, 4000)
+        } ,
+
         methods: {
             enableModal: function(modal_text) {
                 console.log('modal!')
