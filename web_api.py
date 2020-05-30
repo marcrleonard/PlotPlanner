@@ -6,7 +6,7 @@ from flask_cors import CORS
 from python.plotter import PlotControl
 
 
-app = Flask(__name__, static_url_path='', static_folder='build')
+app = Flask(__name__, static_url_path='', static_folder='dist')
 
 cors = CORS(app)
 
