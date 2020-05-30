@@ -88,6 +88,9 @@
       },
 
         mounted: function () {
+            // TODO: This needs to be fixed.
+            // it needs to be properly created when mounted,
+            // but then destroyed when unmounted.
          window.setInterval(() => {
 
              let resp = this.$api.status()
@@ -101,10 +104,6 @@
 
          }, 4000)
 
-
-        // window.setInterval(() => {
-        //     console.log('getting status')
-        // }, 2000)
     },
 
         methods: {
