@@ -112,7 +112,7 @@ try:
     from lxml import etree
 except Exception as e:
     localize()
-    errormsg(_("The fantastic lxml wrapper for libxml2 is required by inkex.py and therefore this extension. Please download and install the latest version from http://cheeseshop.python.org/pypi/lxml/, or install it through your package manager by a command like: sudo apt-get install python-lxml\n\nTechnical details:\n%s" % (e,)))
+    errormsg(("The fantastic lxml wrapper for libxml2 is required by inkex.py and therefore this extension. Please download and install the latest version from http://cheeseshop.python.org/pypi/lxml/, or install it through your package manager by a command like: sudo apt-get install python-lxml\n\nTechnical details:\n%s" % (e,)))
     sys.exit()
     
 def check_inkbool(option, opt, value):
@@ -165,7 +165,7 @@ class Effect:
             try:
                 stream = open(filename, 'r')
             except Exception:
-                errormsg(_("Unable to open specified file: %s") % filename)
+                errormsg(("Unable to open specified file: %s") % filename)
                 sys.exit()
 
         # If it wasn't specified, try to open the file specified as
@@ -174,7 +174,8 @@ class Effect:
             try:
                 stream = open(self.svg_file, 'r')
             except Exception:
-                errormsg(_("Unable to open object member file: %s") % self.svg_file)
+                print('')
+                errormsg(("Unable to open object member file: %s") % self.svg_file)
                 sys.exit()
 
         # Finally, if the filename was not specified anywhere, use
