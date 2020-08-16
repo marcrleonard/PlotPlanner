@@ -16,7 +16,7 @@ root_location  = pathlib.Path(os.getcwd())
 print(f'Project root -> {root_location}')
 
 
-dist_location = str(pathlib.Path(root_location, 'dist'))
+dist_location = str(pathlib.Path(root_location, 'src'))
 static_location = str(pathlib.Path(root_location, 'public'))
 
 
@@ -29,7 +29,7 @@ a = Analysis(['web_api.py'],
              pathex=[root_location],
              binaries=[],
              datas=[
-                (dist_location, 'dist'),
+                (dist_location, 'src'),
                 (static_location, 'static')
              ],
              hiddenimports=[],
