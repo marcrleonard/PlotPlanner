@@ -10,12 +10,24 @@ app = Flask(__name__, static_url_path='', static_folder='dist')
 
 cors = CORS(app)
 
+cwd = os.getcwd()
+print(cwd)
+
+for f in os.scandir():
+    print(f)
+
+# subfolders = [ f.path for f in os.scandir(folder) if f.is_dir() ]
+#
+# for x,y,z in os.walk(cwd):
+#     print(x)
+
 pc = PlotControl(interactive=False)
 
 # Serve React App
 @app.route('/')
 # @app.route('/<path:path>')
 def serve(path=''):
+    print('looking for dist in: ' + cwd)
     return send_from_directory('dist','index.html')
 
 
