@@ -124,12 +124,12 @@ class PlotControl(object):
             input_options = {
                 # "tab": "timing",
                 "tab": "splash",
-                "penUpPosition": 10, # lower is higher?
+                "penUpPosition": 17, # lower is higher?
                 # "penUpPosition": 20, # lower is higher?
                 "penDownPosition": 50,  # this is the movement ACTUALLY drawing
                 # "laserPower": 50,
                 # "setupType": 'align-mode',
-                "penDownSpeed": 20,  # this is the movement when NOT drawing
+                "penDownSpeed": 25,  # this is the movement when NOT drawing
                 "rapidSpeed": 70,
                 # "rapidSpeed": 50,
                 "ServoUpSpeed": 40,
@@ -142,7 +142,7 @@ class PlotControl(object):
                 "resolution": 1,
                 "smoothness": 10,
                 # "cornering": 10,
-                "cornering": 20,
+                "cornering": 15,
                 "manualType": 'none',
                 "WalkDistance": 1,
                 "resumeType": 'ResumeNow',
