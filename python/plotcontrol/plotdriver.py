@@ -33,7 +33,7 @@ from lxml import etree
 
 from python.plotcontrol.simpletransform import *
 from python.plotcontrol import simplepath
-from python.plotcontrol import serial
+import serial
 from python.plotcontrol import inkex
 from python.plotcontrol import plot_utils  # https://github.com/evil-mad/plotink  Requires version 0.4
 from python.plotcontrol import idraw_conf  # Some settings can be changed here.
