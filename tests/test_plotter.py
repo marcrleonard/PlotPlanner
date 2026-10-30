@@ -175,3 +175,25 @@ def test_settings_changed_while_paused_apply_on_resume(fake_ebb, fast, prepared)
 def test_settings_are_clamped():
     p = Plotter(settings={"pen_pos_up": 250, "speed_pendown": 0})
     assert p.settings["pen_pos_up"] == 100 and p.settings["speed_pendown"] == 1
+
+
+def test_pen_change_pause_between_layers(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared, pen_changes=True)
+    assert p.wait(60)
+    s = p.status()
+    assert s["state"] == PAUSED and s["pen_change"] == "2 wave"
+    assert s["completed"] == ["pp_1", "pp_2"]  # all of layer 1, none of layer 2
+    assert "Paused for a pen change: next layer 2 wave" in s["messages"]
+    p.manual("raise_pen")  # allowed while paused, for the swap
+    p.resume()
+    assert p.wait(60)
+    s = p.status()
+    assert s["state"] == IDLE and s["pen_change"] is None and s["paths_done"] == 4
+
+
+def test_no_pen_change_pause_for_a_single_layer(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared, layer=2, pen_changes=True)
+    assert p.wait(60)
+    assert p.status()["state"] == IDLE and p.status()["completed"] == ["pp_3", "pp_4"]

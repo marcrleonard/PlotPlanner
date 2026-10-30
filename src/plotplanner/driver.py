@@ -100,11 +100,16 @@ class Driver(axidraw.AxiDraw):
         self._pause_requested = pause_requested
         self._take_live_settings = take_live_settings
         self._remote_pause = False
+        self._entering: str | None = None  # name of the "!" layer being entered
+        self.pen_change: str | None = None  # set when the plot stopped for a pen change: the next layer
 
     def _relay(self, text):
         # A remote pause goes through the driver's forced-pause path, which credits a layer name.
-        if self._remote_pause and str(text).startswith("Plot paused by layer name control"):
-            text = "Plot paused."
+        if str(text).startswith("Plot paused by layer name control"):
+            if self._entering is not None:
+                text = f"Paused for a pen change: next layer {self._entering}"
+            elif self._remote_pause:
+                text = "Plot paused."
         self._message(text)
 
     def configure(self, svg: str, settings: dict, mode: str = "plot", layer: int | None = None, preview: bool = False):
@@ -126,6 +131,17 @@ class Driver(axidraw.AxiDraw):
         super().plot_path(path, mat_transform)
         if self.plot_current_layer and not self.b_stopped:
             self._on_path_done(path_id)
+
+    def DoWePlotLayer(self, str_layer_name):  # noqa: N802 - overrides the driver's name
+        # A layer named "!..." makes the driver pause inside this call; remember which one.
+        name = str(str_layer_name).strip()
+        self._entering = name[1:].strip() if name.startswith("!") else None
+        try:
+            return super().DoWePlotLayer(str_layer_name)
+        finally:
+            if self._entering is not None and self.b_stopped:
+                self.pen_change = self._entering
+            self._entering = None
 
     def PauseResumeCheck(self):  # noqa: N802 - overrides the driver's name
         # Runs before every motion segment, on the plot thread: the place to change course.

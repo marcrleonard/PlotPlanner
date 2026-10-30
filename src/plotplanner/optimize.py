@@ -16,6 +16,11 @@ NSMAP = {"svg": SVG_NS, "inkscape": INKSCAPE_NS}
 PATH_ID_PREFIX = "pp_"
 PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid"]
 ORIENTATIONS = ["auto", "source", "portrait", "landscape"]
+LAYER_SOURCES = ["groups", "color"]  # what becomes a layer (a pen): top-level groups, or stroke colours
+UNGROUPED = "ungrouped"
+PEN_CHANGE_PREFIX = "!"  # the driver pauses at a layer whose name starts with "!"
+# Top-level elements that are not drawing.
+NON_DRAWING = {"defs", "metadata", "title", "desc", "style", "script", "namedview"}
 
 PX_PER_MM = 96 / 25.4
 
@@ -35,6 +40,7 @@ class OptimizeOptions:
     reloop: bool = False  # randomises loop start points; usually adds travel
     simplify: bool = True
     simplify_tolerance: float = 0.05
+    layers_from: str = "groups"  # one of LAYER_SOURCES
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "OptimizeOptions":
@@ -45,6 +51,8 @@ class OptimizeOptions:
             opts.paper = None
         if opts.orientation not in ORIENTATIONS:
             raise ValueError(f"orientation must be one of {ORIENTATIONS}")
+        if opts.layers_from not in LAYER_SOURCES:
+            raise ValueError(f"layers_from must be one of {LAYER_SOURCES}")
         return opts
 
 
@@ -106,6 +114,65 @@ def _pipeline(opts: OptimizeOptions) -> str:
     return " ".join(steps)
 
 
+def _group_layers(svg: str) -> tuple[str, dict[int, str]]:
+    """Make every top-level group a numbered layer, and collect drawing outside any group into
+    its own "ungrouped" layer, so vpype keeps them apart (it folds both into layer 1 otherwise).
+
+    Returns the rewritten SVG and {layer number: original name}. An SVG with no top-level
+    groups is returned unchanged, as a single layer.
+    """
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    children = [el for el in root if isinstance(el.tag, str) and etree.QName(el).localname not in NON_DRAWING]
+    if not any(etree.QName(el).localname == "g" for el in children):
+        return svg, {}
+
+    loose = [el for el in children if etree.QName(el).localname != "g"]
+    if loose:
+        # The ungrouped layer sits where the first loose element was.
+        holder = etree.Element(f"{{{SVG_NS}}}g", {f"{{{INKSCAPE_NS}}}label": UNGROUPED})
+        loose[0].addprevious(holder)
+        for el in loose:
+            holder.append(el)
+
+    names = {}
+    for number, g in enumerate(root.iterfind("svg:g", NSMAP), start=1):
+        names[number] = g.get(f"{{{INKSCAPE_NS}}}label") or g.get("id") or ""
+        g.set(f"{{{INKSCAPE_NS}}}groupmode", "layer")
+        g.set(f"{{{INKSCAPE_NS}}}label", str(number))
+    return etree.tostring(root, encoding="unicode"), names
+
+
+def _read(svg: str, opts: OptimizeOptions) -> tuple[vp.Document, dict[int, str]]:
+    # 0.1 mm quantization: curves become polylines well below pen width.
+    quantization = 0.1 * PX_PER_MM
+    if opts.layers_from == "color":
+        doc = vp.read_svg_by_attributes(io.StringIO(svg), ["stroke"], quantization)
+        names = {lid: str(layer.property(vp.METADATA_FIELD_COLOR) or "") for lid, layer in doc.layers.items()}
+    else:
+        svg, names = _group_layers(svg)
+        doc = vp.read_multilayer_svg(io.StringIO(svg), quantization)
+    return doc, names
+
+
+def add_pen_changes(svg: str) -> str:
+    """Insert an empty "!<next layer>" layer before every layer but the first. The driver pauses
+    there (its layer-name pause), which is where the pen gets swapped.
+
+    A document that already has "!" layers (added here before, or by its author) is left as is.
+    """
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    layers = list(root.iterfind("svg:g[@inkscape:groupmode='layer']", NSMAP))
+    if any(g.get(f"{{{INKSCAPE_NS}}}label", "").startswith(PEN_CHANGE_PREFIX) for g in layers):
+        return svg
+    for g in layers[1:]:
+        label = g.get(f"{{{INKSCAPE_NS}}}label", "")
+        g.addprevious(etree.Element(f"{{{SVG_NS}}}g", {
+            f"{{{INKSCAPE_NS}}}groupmode": "layer",
+            f"{{{INKSCAPE_NS}}}label": f"{PEN_CHANGE_PREFIX}{label}",
+        }))
+    return etree.tostring(root, encoding="unicode")
+
+
 def label_and_number(svg: str, layer_names: dict[int, str] | None = None) -> tuple[str, int]:
     """Give every path a sequential id (pp_1, pp_2, ...) in document order, which is also plot
     order, and name layers "<n> <name>" so the plotter's layer mode can select them.
@@ -145,8 +212,7 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
     """
     opts = options if isinstance(options, OptimizeOptions) else OptimizeOptions.from_dict(options)
 
-    # 0.1 mm quantization: curves become polylines well below pen width.
-    doc = vp.read_multilayer_svg(io.StringIO(svg), quantization=0.1 * PX_PER_MM)
+    doc, source_names = _read(svg, opts)
     if doc.is_empty():
         raise ValueError("no drawable paths found in SVG")
 
@@ -160,7 +226,7 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
         doc = vpype_cli.execute(pipeline, document=doc)
     after = _stats(doc)
 
-    names = {lid: layer.property(vp.METADATA_FIELD_NAME) for lid, layer in doc.layers.items()}
+    names = {lid: source_names.get(lid) or layer.property(vp.METADATA_FIELD_NAME) for lid, layer in doc.layers.items()}
     out = io.StringIO()
     vp.write_svg(out, doc, layer_label_format="%d", set_date=False)
     svg_out, count = label_and_number(out.getvalue(), names)

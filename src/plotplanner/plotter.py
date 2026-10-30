@@ -47,6 +47,7 @@ class Plotter:
         self.svg: str | None = None  # the document being plotted
         self._resume_svg: str | None = None  # driver output carrying resume data
         self.layer: int | None = None
+        self.pen_change: str | None = None  # paused waiting for this layer's pen ("2 waves")
         self.paths_total = 0
         self.current_path: str | None = None
         self.completed: list[str] = []
@@ -57,11 +58,14 @@ class Plotter:
 
     # ---------------------------------------------------------------- commands
 
-    def plot(self, svg: str, settings: dict | None = None, layer: int | None = None) -> None:
+    def plot(self, svg: str, settings: dict | None = None, layer: int | None = None, pen_changes: bool = False) -> None:
+        """pen_changes: when plotting all layers, pause before each layer after the first."""
         if self.state != IDLE:
             raise PlotterBusy(f"plotter is {self.state}")
         if not optimize.is_prepared(svg):
             svg = optimize.optimize(svg, optimize.AS_IS)["svg"]  # numbers the paths; outside the lock
+        if pen_changes and layer is None:
+            svg = optimize.add_pen_changes(svg)
         with self._lock:
             if self.state != IDLE:
                 raise PlotterBusy(f"plotter is {self.state}")
@@ -149,6 +153,7 @@ class Plotter:
                 "plot_id": self.plot_id,
                 "preview": self.preview,
                 "layer": self.layer,
+                "pen_change": self.pen_change,
                 "paths_total": self.paths_total,
                 "paths_done": len(self.completed),
                 "current_path": self.current_path,
@@ -182,6 +187,7 @@ class Plotter:
 
     def _start(self, mode: str, svg: str, state: str = PLOTTING) -> None:
         self._pause.clear()
+        self.pen_change = None
         self._live = {}  # a new driver starts from self.settings anyway
         if mode != "res_home":
             self._stop.clear()
@@ -191,7 +197,7 @@ class Plotter:
 
     def _run(self, mode: str, svg: str) -> None:
         try:
-            out, stopped = self._drive(mode, svg)
+            out, stopped, pen_change = self._drive(mode, svg)
             if stopped and self._stop.is_set():
                 self._message("Stopping: returning home.")
                 self._drive("res_home", out)
@@ -200,6 +206,7 @@ class Plotter:
                 self.current_path = None
                 if stopped:
                     self._resume_svg = out
+                    self.pen_change = pen_change
                     self.state = PAUSED
                 else:
                     self._resume_svg = None
@@ -214,8 +221,9 @@ class Plotter:
             self._pause.clear()
             self._stop.clear()
 
-    def _drive(self, mode: str, svg: str) -> tuple[str, bool]:
-        """Run the driver once. Returns (output svg with resume data, whether it stopped early)."""
+    def _drive(self, mode: str, svg: str) -> tuple[str, bool, str | None]:
+        """Run the driver once. Returns (output svg with resume data, whether it stopped early,
+        the layer it stopped for if that was a pen change)."""
         ad = driver.Driver(
             on_path_start=self._path_start,
             on_path_done=self._path_done,
@@ -234,7 +242,7 @@ class Plotter:
                 logging.getLogger(name).removeHandler(handler)
         if ad.serial_port is None and not self.preview:
             raise RuntimeError("no plotter found")
-        return out, bool(ad.b_stopped)
+        return out, bool(ad.b_stopped), ad.pen_change
 
     def _take_live_settings(self) -> dict:
         with self._lock:

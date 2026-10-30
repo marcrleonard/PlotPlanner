@@ -46,3 +46,44 @@ def test_rejects_empty_and_bad_options():
         optimize.OptimizeOptions.from_dict({"orientation": "sideways"})
     with pytest.raises(ValueError):
         optimize.optimize(open("svgs/tree_test_text.svg").read(), {"paper": "napkin"})
+
+
+MIXED = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="200mm" height="100mm" viewBox="0 0 200 100">
+  <title>mixed</title>
+  <path d="M5 5 L20 5" stroke="blue" fill="none"/>
+  <g id="plain"><path d="M10 10 L50 10" stroke="black" fill="none"/><path d="M10 20 L50 20" stroke="red" fill="none"/></g>
+  <g inkscape:groupmode="layer" inkscape:label="named"><path d="M10 30 L50 30" stroke="red" fill="none"/></g>
+  <circle cx="150" cy="50" r="10" stroke="blue" fill="none"/>
+</svg>"""
+
+
+def test_every_top_level_group_and_loose_drawing_gets_its_own_layer():
+    # vpype alone folds the plain group and the loose elements into layer 1
+    result = optimize.optimize(MIXED, optimize.AS_IS)
+    assert result["layers"] == [
+        {"id": 1, "name": "ungrouped"},
+        {"id": 2, "name": "plain"},
+        {"id": 3, "name": "named"},
+    ]
+    assert result["paths"] == 5
+
+
+def test_layers_from_stroke_colour():
+    result = optimize.optimize(MIXED, {"paper": None, "layers_from": "color"})
+    assert [layer["name"] for layer in result["layers"]] == ["#0000ff", "#000000", "#ff0000"]
+    assert result["after"]["paths"] == 5
+
+
+def test_ungrouped_svg_stays_one_layer():
+    flat = '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm"><path d="M1 1 L9 9" stroke="#000"/></svg>'
+    assert len(optimize.optimize(flat, optimize.AS_IS)["layers"]) == 1
+
+
+def test_pen_change_layers_go_between_layers(sample_svg):
+    svg = optimize.add_pen_changes(optimize.optimize(sample_svg, optimize.AS_IS)["svg"])
+    root = etree.fromstring(svg.encode())
+    labels = [g.get(f"{{{optimize.INKSCAPE_NS}}}label") for g in root.iterfind("svg:g", optimize.NSMAP)]
+    assert labels == ["1 rings", "!2 wave", "2 wave"]
+    assert optimize.add_pen_changes(svg) == svg  # idempotent
+    assert optimize.list_layers(svg) == [{"id": 1, "name": "rings"}, {"id": 2, "name": "wave"}]

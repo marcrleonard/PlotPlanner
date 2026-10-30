@@ -56,6 +56,12 @@
           <label>Margin (mm)
             <input name="margin" type="number" min="0" step="1" value="15">
           </label>
+          <label>Layers (one per pen) from
+            <select name="layers_from">
+              <option value="groups">Top-level groups</option>
+              <option value="color">Stroke colour</option>
+            </select>
+          </label>
           <label class="check"><input name="fit" type="checkbox" checked> Scale to fill margins</label>
           <fieldset>
             <legend>Optimize</legend>
@@ -84,10 +90,12 @@
           <div class="progress"><div id="progress-bar"></div></div>
           <div class="progress-text"><span id="progress-count">0 / 0 paths</span><span id="progress-time"></span></div>
           <div id="plot-state" class="state">idle</div>
+          <div id="pen-change" class="pen-change" hidden></div>
         </div>
         <label>Layer
           <select id="layer"><option value="">All layers</option></select>
         </label>
+        <label class="check"><input id="pen-changes" type="checkbox" checked> Pause for a pen change between layers</label>
         <div class="buttons">
           <button id="plot-button" class="primary">Plot</button>
           <button id="pause-button" disabled>Pause</button>

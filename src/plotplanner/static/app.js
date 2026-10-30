@@ -197,6 +197,7 @@ function optimizeOptions() {
   return {
     paper: paper === "source" ? null : paper,
     orientation: f.orientation.value,
+    layers_from: f.layers_from.value,
     margin: Number(f.margin.value) || 0,
     fit: f.fit.checked,
     merge: f.merge.checked,
@@ -288,6 +289,7 @@ $("#layer").addEventListener("change", () => {
     render(state.current, { tracking: true });
     markSkippedLayers(Number($("#layer").value) || null);
   }
+  updateControls();
 });
 
 $("#plot-button").addEventListener("click", (e) =>
@@ -295,7 +297,12 @@ $("#plot-button").addEventListener("click", (e) =>
     const layer = $("#layer").value;
     const s = await api("/plot", {
       method: "POST",
-      body: { svg: state.current, layer: layer ? Number(layer) : null, settings: readSettings() },
+      body: {
+        svg: state.current,
+        layer: layer ? Number(layer) : null,
+        pen_changes: $("#pen-changes").checked,
+        settings: readSettings(),
+      },
     });
     state.plotId = s.plot_id;
     await showServerDocument();
@@ -405,6 +412,13 @@ function applyStatus(s) {
   const label = $("#plot-state");
   label.textContent = s.preview ? `${s.state} (preview)` : s.state;
   label.className = `state ${s.state}`;
+  const penChange = $("#pen-change");
+  penChange.hidden = !(s.state === "paused" && s.pen_change);
+  if (!penChange.hidden) {
+    const [id, ...name] = s.pen_change.split(" ");
+    const title = Object.assign(document.createElement("strong"), { textContent: "Pen change" });
+    penChange.replaceChildren(title, `Put in the pen for layer ${id}${name.length ? ` (${name.join(" ")})` : ""}, then Resume.`);
+  }
   $("#messages").replaceChildren(...[...s.messages].reverse().map((m) => Object.assign(document.createElement("li"), { textContent: m })));
   if (s.error) $("#messages").prepend(Object.assign(document.createElement("li"), { textContent: `Error: ${s.error}` }));
 
@@ -427,6 +441,7 @@ function updateControls() {
   $("#pause-button").textContent = s === "paused" ? "Resume" : "Pause";
   $("#stop-button").disabled = !(s === "plotting" || s === "paused");
   $("#layer").disabled = busy || state.layers.length < 2;
+  $("#pen-changes").disabled = busy || state.layers.length < 2 || Boolean($("#layer").value);
   for (const b of $$("[data-manual]")) {
     b.disabled = !state.online || !(s === "idle" || (s === "paused" && b.dataset.manual !== "disable_xy"));
   }

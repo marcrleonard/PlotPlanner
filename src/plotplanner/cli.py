@@ -22,15 +22,18 @@ def optimize_options(func):
         click.option("--fit/--no-fit", default=True, show_default=True, help="Scale to fill the margins."),
         click.option("--two-opt", is_flag=True, help="Slower, shorter travel."),
         click.option("--reloop", is_flag=True, help="Re-pick start points of closed paths."),
+        click.option("--layers-from", type=click.Choice(opt.LAYER_SOURCES), default="groups", show_default=True,
+                     help="What becomes a layer (a pen): top-level groups or stroke colours."),
     ]
     for option in reversed(options):
         func = option(func)
     return func
 
 
-def _options(paper, orientation, margin, fit, two_opt, reloop) -> opt.OptimizeOptions:
+def _options(paper, orientation, margin, fit, two_opt, reloop, layers_from) -> opt.OptimizeOptions:
     return opt.OptimizeOptions.from_dict(
-        dict(paper=paper, orientation=orientation, margin=margin, fit=fit, two_opt=two_opt, reloop=reloop)
+        dict(paper=paper, orientation=orientation, margin=margin, fit=fit, two_opt=two_opt, reloop=reloop,
+             layers_from=layers_from)
     )
 
 
@@ -81,9 +84,10 @@ def optimize(source, output, **kwargs):
 @click.argument("source", type=click.File("r"))
 @click.option("--as-is", is_flag=True, help="Plot without optimizing.")
 @click.option("--layer", type=int, help="Plot only this layer.")
+@click.option("--pen-changes", is_flag=True, help="Pause before each layer after the first to swap pens.")
 @click.option("--preview", is_flag=True, help="Simulate without a plotter.")
 @optimize_options
-def plot(source, as_is, layer, preview, **kwargs):
+def plot(source, as_is, layer, pen_changes, preview, **kwargs):
     """Plot an SVG. Ctrl-C pauses; Ctrl-C again stops and returns home."""
     from .server import load_settings
 
@@ -92,7 +96,7 @@ def plot(source, as_is, layer, preview, **kwargs):
     _report(result)
 
     plotter = Plotter(settings=load_settings(), preview=preview)
-    plotter.plot(result["svg"], layer=layer)
+    plotter.plot(result["svg"], layer=layer, pen_changes=pen_changes)
     shown = None
     while True:
         try:
@@ -104,6 +108,9 @@ def plot(source, as_is, layer, preview, **kwargs):
                     shown = line
             if plotter.state != PAUSED:
                 break
+            s = plotter.status()
+            if s["pen_change"]:
+                click.echo(f"\nPen change: put in the pen for layer {s['pen_change']}.", err=True)
             click.echo("\nPaused. Enter to resume, Ctrl-C to stop and go home.", err=True)
             input()
             plotter.resume()

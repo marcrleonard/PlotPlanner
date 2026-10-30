@@ -8,8 +8,10 @@ from the computer the plotter is plugged into, or remotely from any browser.
 - **Prepare:** paper size and orientation, margins, scale to fit, plus vpype's `linemerge`,
   `linesort` (optionally two-opt), `reloop` and `linesimplify`. You see the pen-up travel before
   and after, and can download the optimized SVG.
-- **Layers:** Inkscape layers, including LineDream's `Group(label=...)`, are kept, so you can
-  plot one layer at a time for pen changes.
+- **Layers and pens:** each top-level group (Inkscape layers, LineDream's `Group(label=...)`,
+  plain `<g>`) becomes a layer, and drawing outside any group gets its own "ungrouped" layer.
+  Or make one layer per stroke colour. Plot one layer, or all of them with a pause before each
+  new layer to swap pens.
 - **Plot:** live progress drawn on the preview (paths done, the current path, time left), with
   pause, resume, and stop-and-home. Pen up/down and motors off for setup.
 - **Remote:** a small JSON API with a static control page. Point any copy of the page at
@@ -49,6 +51,7 @@ host it anywhere else (GitHub Pages, a LAN box) and point it at the server.
 uv run plotplanner optimize drawing.svg --paper a4 -o drawing-opt.svg
 uv run plotplanner plot drawing.svg --paper a3 --margin 20   # Ctrl-C pauses, again stops + homes
 uv run plotplanner plot drawing.svg --as-is --layer 2
+uv run plotplanner plot drawing.svg --pen-changes --layers-from color   # one pen per colour
 uv run plotplanner pen up          # also: pen down, motors off, connection, version
 ```
 
@@ -74,7 +77,7 @@ has a token.
 | `GET /connection` | connected plotters (lists ports, never opens them) |
 | `GET /document` | the SVG being plotted, so a late client can draw progress |
 | `POST /optimize` | `{svg, options}` → `{svg, paths, layers, before, after}` |
-| `POST /plot` | `{svg, settings?, layer?}` |
+| `POST /plot` | `{svg, settings?, layer?, pen_changes?}`; `/status` then reports `pen_change` (the next layer) while paused for a swap |
 | `POST /pause` · `/resume` · `/stop` | |
 | `POST /manual` | `{command}`: `raise_pen`, `lower_pen`, `enable_xy`, `disable_xy`, `fw_version` |
 | `GET/POST /settings` | read, update (live during a plot; see above), or `{reset: true}` |

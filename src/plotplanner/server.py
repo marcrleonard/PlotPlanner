@@ -92,6 +92,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             preview=plotter.preview,
             paper_sizes=optimize.PAPER_SIZES,
             orientations=optimize.ORIENTATIONS,
+            layer_sources=optimize.LAYER_SOURCES,
             optimize_defaults=optimize.OptimizeOptions().__dict__,
             settings=plotter.settings,
             setting_defaults=driver.DEFAULT_SETTINGS,
@@ -122,7 +123,12 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
     def plot():
         data = body()
         layer = data.get("layer")
-        plotter.plot(require_svg(data), settings=data.get("settings"), layer=int(layer) if layer not in (None, "") else None)
+        plotter.plot(
+            require_svg(data),
+            settings=data.get("settings"),
+            layer=int(layer) if layer not in (None, "") else None,
+            pen_changes=bool(data.get("pen_changes")),
+        )
         if data.get("settings") and settings_file:
             save_settings(plotter.settings, settings_file)
         return jsonify(plotter.status())
