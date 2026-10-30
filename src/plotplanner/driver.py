@@ -57,6 +57,18 @@ DEFAULT_SETTINGS = {
     "port": "",
 }
 
+def machine_travel_mm() -> dict[int, list[float]]:
+    """Reachable area (x, y) per machine model, from the driver's config."""
+    p = axidraw.AxiDraw(default_logging=False).params
+    travel = {
+        1: (p.x_travel_default, p.y_travel_default),
+        2: (p.x_travel_V3A3, p.y_travel_V3A3),
+        3: (p.x_travel_V3XLX, p.y_travel_V3XLX),
+        4: (p.x_travel_MiniKit, p.y_travel_MiniKit),
+    }
+    return {model: [round(x * 25.4), round(y * 25.4)] for model, (x, y) in travel.items()}
+
+
 MANUAL_COMMANDS = ["raise_pen", "lower_pen", "enable_xy", "disable_xy", "fw_version"]
 
 

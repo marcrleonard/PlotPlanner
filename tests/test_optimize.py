@@ -87,3 +87,14 @@ def test_pen_change_layers_go_between_layers(sample_svg):
     assert labels == ["1 rings", "!2 wave", "2 wave"]
     assert optimize.add_pen_changes(svg) == svg  # idempotent
     assert optimize.list_layers(svg) == [{"id": 1, "name": "rings"}, {"id": 2, "name": "wave"}]
+
+
+def test_layout_reports_page_and_drawing_size(sample_svg):
+    result = optimize.optimize(sample_svg, {"paper": "a4", "margin": 10})
+    assert result["page_mm"] == [297.0, 210.0]
+    x, y, w, h = result["bounds_mm"]
+    assert x >= 9.9 and y >= 9.9 and x + w <= 287.1 and y + h <= 200.1  # inside the margins
+    assert abs(w - 277) < 0.5 or abs(h - 190) < 0.5  # scaled to touch them
+
+    custom = optimize.optimize(sample_svg, {"paper": "120x80mm", "fit": False})
+    assert custom["page_mm"] == [120.0, 80.0] and custom["bounds_mm"][2] > 120  # runs off the sheet

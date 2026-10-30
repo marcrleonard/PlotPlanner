@@ -45,6 +45,10 @@
           <label>Paper
             <select name="paper" id="paper"></select>
           </label>
+          <div id="custom-size" class="pair" hidden>
+            <label>Width (mm) <input name="paper_w" type="number" min="10" step="1" value="300"></label>
+            <label>Height (mm) <input name="paper_h" type="number" min="10" step="1" value="400"></label>
+          </div>
           <label>Orientation
             <select name="orientation">
               <option value="auto">Follow the drawing</option>
@@ -71,6 +75,8 @@
             <label class="check"><input name="reloop" type="checkbox"> Re-pick loop start points</label>
             <label class="check"><input name="simplify" type="checkbox" checked> Simplify (0.05 mm)</label>
           </fieldset>
+          <div id="layout-info" class="kv" hidden></div>
+          <ul id="layout-warnings" class="warnings" hidden></ul>
           <div class="buttons">
             <button type="submit" class="primary" id="optimize-button">Optimize</button>
             <button type="button" id="revert-button" disabled>Revert</button>

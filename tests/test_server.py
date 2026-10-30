@@ -14,6 +14,7 @@ def test_page_and_info(client):
     assert client.get("/").status_code == 200
     info = client.get("/api/info").get_json()
     assert "a3" in info["paper_sizes"] and info["preview"] is True
+    assert info["machine_travel_mm"]["2"] == [430, 297]
 
 
 def test_optimize_plot_status(client, sample_svg):

@@ -93,6 +93,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             paper_sizes=optimize.PAPER_SIZES,
             orientations=optimize.ORIENTATIONS,
             layer_sources=optimize.LAYER_SOURCES,
+            machine_travel_mm=driver.machine_travel_mm(),
             optimize_defaults=optimize.OptimizeOptions().__dict__,
             settings=plotter.settings,
             setting_defaults=driver.DEFAULT_SETTINGS,

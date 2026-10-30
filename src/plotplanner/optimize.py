@@ -231,9 +231,15 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
     vp.write_svg(out, doc, layer_label_format="%d", set_date=False)
     svg_out, count = label_and_number(out.getvalue(), names)
 
+    page = doc.page_size
+    bounds = doc.bounds()
     return {
         "svg": svg_out,
         "paths": count,
+        "page_mm": [round(float(v) / PX_PER_MM, 1) for v in page] if page else None,
+        # x, y, width, height of the drawing on the page
+        "bounds_mm": [round(float(v) / PX_PER_MM, 1) for v in (bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1])]
+        if bounds else None,
         "layers": [{"id": lid, "name": names[lid] or ""} for lid in sorted(doc.layers)],
         "before": before,
         "after": after,

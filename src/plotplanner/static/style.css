@@ -29,6 +29,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
@@ -252,3 +254,19 @@ dialog h2 { margin: 0; font-size: 26px; }
   .stage { padding: 16px; order: -1; }
   .canvas svg { max-height: 60vh; }
 }
+
+/* ---------------------------------------------------------------- layout preview */
+
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pair input { width: 100%; min-width: 0; }
+.kv#layout-info { margin: 4px 0 0; }
+.warnings { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.warnings li {
+  padding: 8px 10px;
+  border-left: 4px solid #d6a128;
+  border-radius: var(--radius);
+  background: rgb(214 161 40 / 0.12);
+  font-size: 13px;
+}
+.canvas svg .guide { fill: none; stroke: var(--accent); stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; stroke-width: 1px; pointer-events: none; }
+.canvas.updating svg { opacity: 0.55; transition: opacity 0.2s; }

@@ -137,7 +137,13 @@ function showStep(step) {
   $$(".steps button").forEach((b) => b.classList.toggle("active", b.dataset.step === step));
   $$("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== step));
   if (step === "plot") enterPlot();
-  else if (state.current) render(state.current);
+  else if (step === "prepare" && state.original) {
+    if (state.layout) showLayout();
+    else {
+      render(state.current);
+      previewLayout();
+    }
+  } else if (step === "load" && state.original) render(state.original);
   updateControls();
 }
 
@@ -154,7 +160,7 @@ function loadText(text, name) {
     toast(err.message, true);
     return;
   }
-  Object.assign(state, { original: text, current: text, prepared: false, optimized: false, fileName: name, layers: [], plotId: null, completed: 0 });
+  Object.assign(state, { original: text, current: text, prepared: false, optimized: false, fileName: name, layers: [], plotId: null, completed: 0, layout: null });
   const d = describe(text);
   kv($("#doc-info"), [
     ["File", name],
@@ -191,11 +197,17 @@ window.addEventListener("drop", (e) => {
 
 // ------------------------------------------------------------------ prepare
 
+function paperValue() {
+  const f = $("#optimize-form");
+  if (f.paper.value === "source") return null;
+  if (f.paper.value === "custom") return `${Number(f.paper_w.value) || 0}x${Number(f.paper_h.value) || 0}mm`;
+  return f.paper.value;
+}
+
 function optimizeOptions() {
   const f = $("#optimize-form");
-  const paper = f.paper.value;
   return {
-    paper: paper === "source" ? null : paper,
+    paper: paperValue(),
     orientation: f.orientation.value,
     layers_from: f.layers_from.value,
     margin: Number(f.margin.value) || 0,
@@ -216,14 +228,108 @@ function applyPrepared(result, optimized) {
   layerSelect.disabled = result.layers.length < 2;
 }
 
+// Layout preview: the sheet at the chosen size with the drawing placed on it, exactly as it will
+// plot. Changing a layout field re-runs only vpype's layout (quick); Optimize adds the sorting.
+const PX_PER_MM = 96 / 25.4;
+const LAYOUT_FIELDS = ["paper", "paper_w", "paper_h", "orientation", "margin", "fit", "layers_from"];
+
+function showLayout() {
+  render(state.current);
+  const result = state.layout;
+  const svg = $("svg", canvas);
+  if (!result?.page_mm || !svg) return;
+  const opts = result.options;
+  if (opts.paper && opts.fit && opts.margin > 0) {
+    const [w, h] = result.page_mm;
+    const m = opts.margin;
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    for (const [k, v] of Object.entries({ x: m, y: m, width: w - 2 * m, height: h - 2 * m })) rect.setAttribute(k, v * PX_PER_MM);
+    rect.setAttribute("class", "guide");
+    svg.append(rect);
+  }
+  layoutInfo();
+}
+
+function fmtMm([w, h]) {
+  return `${Math.round(w)} × ${Math.round(h)} mm`;
+}
+
+function layoutInfo() {
+  const result = state.layout;
+  if (!result?.page_mm) {
+    $("#layout-info").hidden = $("#layout-warnings").hidden = true;
+    return;
+  }
+  const [pw, ph] = result.page_mm;
+  const orientation = pw > ph ? "landscape" : pw < ph ? "portrait" : "square";
+  const paperName = result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
+  const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
+  if (result.bounds_mm) rows.push(["Drawing", fmtMm(result.bounds_mm.slice(2))]);
+  kv($("#layout-info"), rows);
+
+  const warnings = [];
+  const b = result.bounds_mm;
+  if (b && (b[0] < -0.5 || b[1] < -0.5 || b[0] + b[2] > pw + 0.5 || b[1] + b[3] > ph + 0.5)) {
+    warnings.push("The drawing runs off the paper; anything outside the sheet is clipped.");
+  }
+  const settings = state.status?.settings ?? state.info?.settings ?? {};
+  const reach = state.info?.machine_travel_mm?.[settings.model];
+  if (reach) {
+    // Portrait pages are plotted rotated onto the long axis when auto-rotate is on.
+    const plotted = settings.auto_rotate && ph > pw ? [ph, pw] : [pw, ph];
+    if (plotted[0] > reach[0] + 0.5 || plotted[1] > reach[1] + 0.5) {
+      warnings.push(`This paper is bigger than the plotter reaches (${fmtMm(reach)}, the Machine size setting). ` +
+        "Drawing beyond that from the home corner is clipped.");
+    }
+  }
+  const list = $("#layout-warnings");
+  list.replaceChildren(...warnings.map((w) => Object.assign(document.createElement("li"), { textContent: w })));
+  list.hidden = !warnings.length;
+}
+
+let layoutTimer;
+let layoutRequest = 0;
+
+function previewLayout() {
+  clearTimeout(layoutTimer);
+  if (!state.original || !state.online) return;
+  layoutTimer = setTimeout(async () => {
+    const request = ++layoutRequest;
+    const options = { ...optimizeOptions(), merge: false, sort: false, reloop: false, simplify: false };
+    canvas.classList.add("updating");
+    try {
+      const result = await api("/optimize", { method: "POST", body: { svg: state.original, options } });
+      if (request !== layoutRequest) return; // a newer change is on its way
+      applyPrepared(result, false);
+      state.layout = { ...result, options };
+      $("#optimize-stats").hidden = true;
+      if (state.step === "prepare") showLayout();
+    } catch (err) {
+      if (request === layoutRequest) toast(err.message, true);
+    } finally {
+      if (request === layoutRequest) canvas.classList.remove("updating");
+      updateControls();
+    }
+  }, 300);
+}
+
+$("#optimize-form").addEventListener("input", (e) => {
+  if (e.target.name === "paper") $("#custom-size").hidden = e.target.value !== "custom";
+  if (LAYOUT_FIELDS.includes(e.target.name)) previewLayout();
+});
+
 $("#optimize-form").addEventListener("submit", (e) => {
   e.preventDefault();
+  clearTimeout(layoutTimer);
+  layoutRequest++;
   const button = $("#optimize-button");
   button.textContent = "Optimizing…";
   guarded(async () => {
-    const result = await api("/optimize", { method: "POST", body: { svg: state.original, options: optimizeOptions() } });
+    const options = optimizeOptions();
+    const result = await api("/optimize", { method: "POST", body: { svg: state.original, options } });
     applyPrepared(result, true);
-    render(state.current);
+    state.layout = { ...result, options };
+    showLayout();
     const { before: b, after: a } = result;
     const pct = b.travel_mm ? Math.round((100 * (b.travel_mm - a.travel_mm)) / b.travel_mm) : 0;
     kv($("#optimize-stats"), [
@@ -236,9 +342,9 @@ $("#optimize-form").addEventListener("submit", (e) => {
 });
 
 $("#revert-button").addEventListener("click", () => {
-  Object.assign(state, { current: state.original, prepared: false, optimized: false, layers: [] });
   $("#optimize-stats").hidden = true;
-  render(state.current);
+  Object.assign(state, { optimized: false });
+  previewLayout(); // back to the plain layout, unsorted
   updateControls();
 });
 
@@ -373,7 +479,10 @@ settingsForm.addEventListener("change", (e) => {
   if (!input.name) return;
   guarded(async () => {
     try {
-      fillSettings(await api("/settings", { method: "POST", body: { [input.name]: settingValue(input) } }));
+      const settings = await api("/settings", { method: "POST", body: { [input.name]: settingValue(input) } });
+      fillSettings(settings);
+      if (state.status) state.status.settings = settings;
+      layoutInfo(); // the reach warning depends on machine size and auto-rotate
       const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
       if (state.status?.state === "plotting") toast(`Applied: ${label}`);
     } catch (err) {
@@ -537,6 +646,7 @@ async function connect() {
   const selected = paper.value || state.info.optimize_defaults.paper;
   paper.replaceChildren(
     ...state.info.paper_sizes.map((p) => new Option(p.toUpperCase(), p)),
+    new Option("Custom…", "custom"),
     new Option("Keep source page", "source"),
   );
   paper.value = selected;
