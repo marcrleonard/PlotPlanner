@@ -162,7 +162,7 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
 
     names = {lid: layer.property(vp.METADATA_FIELD_NAME) for lid, layer in doc.layers.items()}
     out = io.StringIO()
-    vp.write_svg(out, doc, layer_label_format="%d", color_mode="layer", set_date=False)
+    vp.write_svg(out, doc, layer_label_format="%d", set_date=False)
     svg_out, count = label_and_number(out.getvalue(), names)
 
     return {

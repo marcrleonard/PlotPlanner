@@ -133,6 +133,7 @@ function kv(el, rows) {
 
 function showStep(step) {
   state.step = step;
+  $(`.steps button[data-step="${step}"]`).disabled = false;
   $$(".steps button").forEach((b) => b.classList.toggle("active", b.dataset.step === step));
   $$("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== step));
   if (step === "plot") enterPlot();

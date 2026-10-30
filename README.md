@@ -3,7 +3,7 @@
 Load an SVG, optimize it for the pen, and plot it on an iDraw or AxiDraw. You can drive it
 from the computer the plotter is plugged into, or remotely from any browser.
 
-![PlotPlanner plotting](docs/screenshot.png)
+![PlotPlanner plotting](docs/screenshots/3-plotting.png)
 
 - **Prepare:** paper size and orientation, margins, scale to fit, plus vpype's `linemerge`,
   `linesort` (optionally two-opt), `reloop` and `linesimplify`. You see the pen-up travel before
