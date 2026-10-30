@@ -1,9 +1,0 @@
-Flask
-Flask-Cors
-numpy
-scipy
-drawsvg
-lxml
-pyserial
-docopt
-svgwrite

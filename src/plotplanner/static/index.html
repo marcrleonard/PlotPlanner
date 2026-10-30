@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PlotPlanner</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1 class="logo">Plot Planner</h1>
+    <nav class="steps" aria-label="Steps">
+      <button data-step="load" class="active">Load</button>
+      <button data-step="prepare" disabled>Prepare</button>
+      <button data-step="plot" disabled>Plot</button>
+    </nav>
+    <button id="server-button" class="server" title="Server connection">
+      <span id="conn-dot" class="dot"></span><span id="conn-label">Not connected</span>
+    </button>
+  </header>
+
+  <main class="layout">
+    <aside class="panel">
+      <!-- LOAD -->
+      <section data-panel="load">
+        <h2>Load</h2>
+        <label id="drop" class="drop">
+          <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
+          <svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><path d="M24 6v26M13 21l11 11 11-11M8 38h32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Drop an SVG here, or click to choose one</span>
+        </label>
+        <p class="hint">Groups written as Inkscape layers (LineDream's <code>Group(label=…)</code>) become layers you can plot one at a time.</p>
+        <div id="doc-info" class="kv" hidden></div>
+        <button id="to-prepare" class="primary" hidden>Prepare →</button>
+      </section>
+
+      <!-- PREPARE -->
+      <section data-panel="prepare" hidden>
+        <h2>Prepare</h2>
+        <form id="optimize-form" class="form">
+          <label>Paper
+            <select name="paper" id="paper"></select>
+          </label>
+          <div id="custom-size" class="pair" hidden>
+            <label>Width (mm) <input name="paper_w" type="number" min="10" step="1" value="300"></label>
+            <label>Height (mm) <input name="paper_h" type="number" min="10" step="1" value="400"></label>
+          </div>
+          <label>Orientation
+            <select name="orientation">
+              <option value="auto">Follow the drawing</option>
+              <option value="source">Follow the source page</option>
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select>
+          </label>
+          <label>Margin (mm)
+            <input name="margin" type="number" min="0" step="1" value="15">
+          </label>
+          <label>Layers (one per pen) from
+            <select name="layers_from">
+              <option value="groups">Top-level groups</option>
+              <option value="color">Stroke colour</option>
+            </select>
+          </label>
+          <label class="check"><input name="fit" type="checkbox" checked> Scale to fill margins</label>
+          <fieldset>
+            <legend>Optimize</legend>
+            <label class="check"><input name="merge" type="checkbox" checked> Merge touching lines</label>
+            <label class="check"><input name="sort" type="checkbox" checked> Sort to cut pen-up travel</label>
+            <label class="check indent"><input name="two_opt" type="checkbox"> Extra sort pass (slower)</label>
+            <label class="check"><input name="reloop" type="checkbox"> Re-pick loop start points</label>
+            <label class="check"><input name="simplify" type="checkbox" checked> Simplify (0.05 mm)</label>
+          </fieldset>
+          <div id="layout-info" class="kv" hidden></div>
+          <ul id="layout-warnings" class="warnings" hidden></ul>
+          <div class="buttons">
+            <button type="submit" class="primary" id="optimize-button">Optimize</button>
+            <button type="button" id="revert-button" disabled>Revert</button>
+          </div>
+        </form>
+        <div id="optimize-stats" class="kv" hidden></div>
+        <div class="buttons">
+          <button id="download-button" disabled>Download SVG</button>
+          <button id="to-plot" class="primary">Plot →</button>
+        </div>
+      </section>
+
+      <!-- PLOT -->
+      <section data-panel="plot" hidden>
+        <h2>Plot</h2>
+        <div class="progress-block">
+          <div class="progress"><div id="progress-bar"></div></div>
+          <div class="progress-text"><span id="progress-count">0 / 0 paths</span><span id="progress-time"></span></div>
+          <div id="plot-state" class="state">idle</div>
+          <div id="pen-change" class="pen-change" hidden></div>
+        </div>
+        <label>Layer
+          <select id="layer"><option value="">All layers</option></select>
+        </label>
+        <label class="check"><input id="pen-changes" type="checkbox" checked> Pause for a pen change between layers</label>
+        <div class="buttons">
+          <button id="plot-button" class="primary">Plot</button>
+          <button id="pause-button" disabled>Pause</button>
+          <button id="stop-button" class="danger" disabled>Stop</button>
+        </div>
+        <div class="buttons small">
+          <button data-manual="raise_pen">Pen up</button>
+          <button data-manual="lower_pen">Pen down</button>
+          <button data-manual="disable_xy">Motors off</button>
+        </div>
+        <details id="settings">
+          <summary>Plotter settings</summary>
+          <form id="settings-form" class="form">
+            <label>Pen up <output></output><input name="pen_pos_up" type="range" min="0" max="100"></label>
+            <label>Pen down <output></output><input name="pen_pos_down" type="range" min="0" max="100"></label>
+            <label>Drawing speed <output></output><input name="speed_pendown" type="range" min="1" max="110"></label>
+            <label>Travel speed <output></output><input name="speed_penup" type="range" min="1" max="110"></label>
+            <label>Acceleration <output></output><input name="accel" type="range" min="1" max="100"></label>
+            <label>Pen lower rate <output></output><input name="pen_rate_lower" type="range" min="1" max="100"></label>
+            <label>Pen raise rate <output></output><input name="pen_rate_raise" type="range" min="1" max="100"></label>
+            <label>Delay after lowering (ms) <input name="pen_delay_down" type="number" min="0" step="10"></label>
+            <label>Delay after raising (ms) <input name="pen_delay_up" type="number" min="0" step="10"></label>
+            <label>Machine size
+              <select name="model">
+                <option value="1">300 × 218 mm</option>
+                <option value="2">A3 (430 × 297 mm)</option>
+                <option value="3">XLX (595 × 218 mm)</option>
+                <option value="4">MiniKit (160 × 101 mm)</option>
+              </select>
+            </label>
+            <label>Resolution
+              <select name="resolution">
+                <option value="1">High (16× microstepping)</option>
+                <option value="2">Low (faster)</option>
+              </select>
+            </label>
+            <label class="check"><input name="const_speed" type="checkbox"> Constant speed while drawing</label>
+            <label class="check"><input name="auto_rotate" type="checkbox"> Rotate portrait pages to the long axis</label>
+            <label>Serial port <input name="port" type="text" placeholder="first plotter found"></label>
+            <p id="settings-hint" class="hint"></p>
+            <div class="buttons">
+              <button type="button" id="settings-reset">Defaults</button>
+            </div>
+          </form>
+        </details>
+        <ul id="messages" class="messages"></ul>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div id="canvas" class="canvas empty"><p>No drawing loaded</p></div>
+    </section>
+  </main>
+
+  <dialog id="server-dialog">
+    <form method="dialog" class="form">
+      <h2>Server</h2>
+      <p class="hint">The PlotPlanner server running on the computer the plotter is plugged into.</p>
+      <label>URL <input id="server-url" type="url" placeholder="http://raspberrypi.local:5001" required></label>
+      <label>Token <input id="server-token" type="password" placeholder="only if the server uses --token"></label>
+      <div class="buttons">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Connect</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
