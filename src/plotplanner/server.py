@@ -95,6 +95,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             optimize_defaults=optimize.OptimizeOptions().__dict__,
             settings=plotter.settings,
             setting_defaults=driver.DEFAULT_SETTINGS,
+            live_settings=sorted(driver.LIVE_SETTINGS),
             manual_commands=driver.MANUAL_COMMANDS,
             auth=bool(token),
         )

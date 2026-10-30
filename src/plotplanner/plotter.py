@@ -40,6 +40,7 @@ class Plotter:
         self._thread: threading.Thread | None = None
         self._pause = threading.Event()
         self._stop = threading.Event()
+        self._live: dict = {}  # setting changes waiting for the plot thread to pick up
 
         self.state = IDLE
         self.plot_id = 0  # bumps on every new plot so clients know to reload the document
@@ -120,14 +121,22 @@ class Plotter:
             return [m for m in output if m]
 
     def update_settings(self, settings: dict) -> dict:
+        """Change settings. During a plot, speed and pen settings take effect from the next
+        motion segment; machine size, resolution, rotation and port are locked until it ends."""
+        new = driver.clean_settings(settings)
         with self._lock:
-            self.settings.update(driver.clean_settings(settings))
+            changed = {k: v for k, v in new.items() if self.settings.get(k) != v}
+            if self.state != IDLE:
+                locked = sorted(k for k in changed if k not in driver.LIVE_SETTINGS)
+                if locked:
+                    raise PlotterBusy(f"cannot change {', '.join(locked)} while {self.state}")
+                if self.state == PLOTTING:
+                    self._live.update(changed)
+            self.settings.update(new)
             return dict(self.settings)
 
     def reset_settings(self) -> dict:
-        with self._lock:
-            self.settings = dict(driver.DEFAULT_SETTINGS)
-            return dict(self.settings)
+        return self.update_settings(driver.DEFAULT_SETTINGS)
 
     # ---------------------------------------------------------------- queries
 
@@ -148,6 +157,7 @@ class Plotter:
                 "elapsed": round(time.time() - self.started_at, 1) if self.started_at else None,
                 "error": self.error,
                 "messages": list(self.messages)[-10:],
+                "settings": dict(self.settings),
             }
 
     def connection(self) -> dict:
@@ -172,6 +182,7 @@ class Plotter:
 
     def _start(self, mode: str, svg: str, state: str = PLOTTING) -> None:
         self._pause.clear()
+        self._live = {}  # a new driver starts from self.settings anyway
         if mode != "res_home":
             self._stop.clear()
         self.state = state
@@ -209,6 +220,7 @@ class Plotter:
             on_path_start=self._path_start,
             on_path_done=self._path_done,
             pause_requested=self._pause.is_set,
+            take_live_settings=self._take_live_settings,
             message=self._message,
         )
         ad.configure(svg, self.settings, mode=mode, layer=self.layer, preview=self.preview)
@@ -223,6 +235,13 @@ class Plotter:
         if ad.serial_port is None and not self.preview:
             raise RuntimeError("no plotter found")
         return out, bool(ad.b_stopped)
+
+    def _take_live_settings(self) -> dict:
+        with self._lock:
+            changes, self._live = self._live, {}
+        if changes:
+            self._message("Applied: " + ", ".join(f"{k} {v}" for k, v in sorted(changes.items())))
+        return changes
 
     def _path_start(self, path_id: str | None) -> None:
         with self._lock:

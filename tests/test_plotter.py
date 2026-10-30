@@ -126,3 +126,52 @@ def test_manual_commands(fake_ebb):
 def test_settings_are_cleaned():
     p = Plotter(settings={"pen_pos_up": "55", "const_speed": "true", "bogus": 1})
     assert p.settings["pen_pos_up"] == 55 and p.settings["const_speed"] is True and "bogus" not in p.settings
+
+
+def servo(percent):
+    """EBB servo value for a pen position on the iDraw (servo range 7500-28000)."""
+    return round(7500 + (28000 - 7500) / 100 * percent)
+
+
+def test_live_settings_apply_mid_plot(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared, settings={"pen_pos_down": 45})
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    p.update_settings({"pen_pos_down": 30, "speed_pendown": 60})
+    wait_for(lambda: any(m.startswith("Applied:") for m in p.status()["messages"]))
+    assert p.wait(60) and p.status()["paths_done"] == 4
+    commands = fake_ebb.instances[0].commands
+    first, new = commands.index(f"SC,5,{servo(45)}"), commands.index(f"SC,5,{servo(30)}")
+    assert first < new
+    assert "Applied: pen_pos_down 30, speed_pendown 60" in p.status()["messages"]
+    assert p.settings["pen_pos_down"] == 30  # kept for the next plot
+
+
+def test_locked_settings_refused_mid_plot(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared)
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    with pytest.raises(PlotterBusy, match="model"):
+        p.update_settings({"model": 1, "pen_pos_up": 30})
+    assert p.settings["pen_pos_up"] == 20  # all or nothing
+    p.update_settings({"model": p.settings["model"]})  # unchanged is fine
+    p.stop()
+    p.wait(60)
+    p.update_settings({"model": 1})  # idle again
+
+
+def test_settings_changed_while_paused_apply_on_resume(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared)
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    p.pause()
+    p.wait(20)
+    p.update_settings({"pen_pos_down": 35})
+    p.resume()
+    assert p.wait(60)
+    assert f"SC,5,{servo(35)}" in fake_ebb.instances[-1].commands
+
+
+def test_settings_are_clamped():
+    p = Plotter(settings={"pen_pos_up": 250, "speed_pendown": 0})
+    assert p.settings["pen_pos_up"] == 100 and p.settings["speed_pendown"] == 1

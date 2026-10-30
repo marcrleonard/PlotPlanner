@@ -56,6 +56,12 @@ Plotter settings (pen heights, speeds, machine size) are saved on the server in
 `~/.config/plotplanner/settings.json` (or your platform's equivalent). Change them on the page
 or through `POST /api/settings`.
 
+Settings can be changed **while a plot is running**. Pen heights, pen rates and delays, speeds,
+acceleration and constant speed apply from the next move. A new pen height is sent at once if the
+pen is already at that end of its travel, so you can dial in pressure mid-stroke. Machine size,
+resolution, auto-rotate and port change the geometry or the connection, so they are locked until
+the plot ends; the API answers 409 if you try. Changes made while paused apply on resume.
+
 ### API
 
 All endpoints are under `/api` and use JSON. Send `Authorization: Bearer <token>` when the server
@@ -63,7 +69,7 @@ has a token.
 
 | | |
 |---|---|
-| `GET /info` | version, paper sizes, defaults, current settings |
+| `GET /info` | version, paper sizes, defaults, current settings, which settings are live |
 | `GET /status?since=N` | `state` (idle / plotting / paused / stopping), `plot_id`, `paths_done` / `paths_total`, `current_path`, the completed path ids after the first `N`, messages, error |
 | `GET /connection` | connected plotters (lists ports, never opens them) |
 | `GET /document` | the SVG being plotted, so a late client can draw progress |
@@ -71,7 +77,7 @@ has a token.
 | `POST /plot` | `{svg, settings?, layer?}` |
 | `POST /pause` · `/resume` · `/stop` | |
 | `POST /manual` | `{command}`: `raise_pen`, `lower_pen`, `enable_xy`, `disable_xy`, `fw_version` |
-| `GET/POST /settings` | read, update, or `{reset: true}` |
+| `GET/POST /settings` | read, update (live during a plot; see above), or `{reset: true}` |
 
 Path ids (`pp_1`, `pp_2`, …) are assigned by the server in plot order, so a client can colour
 progress by id.

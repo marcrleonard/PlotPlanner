@@ -331,22 +331,26 @@ $$("[data-manual]").forEach((button) =>
 
 const settingsForm = $("#settings-form");
 
+// Fill the form from the server. Skips the control being edited, so another client's (or the
+// server's) values never yank a slider out from under you.
 function fillSettings(settings) {
   for (const [key, value] of Object.entries(settings)) {
     const input = settingsForm.elements[key];
-    if (!input) continue;
+    if (!input || input === document.activeElement) continue;
     if (input.type === "checkbox") input.checked = Boolean(value);
-    else input.value = value;
+    else if (String(input.value) !== String(value)) input.value = value;
+    else continue;
     input.dispatchEvent(new Event("input"));
   }
 }
 
+function settingValue(input) {
+  return input.type === "checkbox" ? input.checked : input.type === "text" ? input.value : Number(input.value);
+}
+
 function readSettings() {
   const out = {};
-  for (const input of settingsForm.elements) {
-    if (!input.name) continue;
-    out[input.name] = input.type === "checkbox" ? input.checked : input.type === "text" ? input.value : Number(input.value);
-  }
+  for (const input of settingsForm.elements) if (input.name) out[input.name] = settingValue(input);
   return out;
 }
 
@@ -355,13 +359,24 @@ $$('input[type="range"]', settingsForm).forEach((input) => {
   input.addEventListener("input", () => (output.textContent = input.value));
 });
 
-settingsForm.addEventListener("submit", (e) => {
-  e.preventDefault();
+// Every control applies when you let go of it; during a plot the server hands speed and pen
+// changes to the plot thread, which applies them from the next move.
+settingsForm.addEventListener("change", (e) => {
+  const input = e.target;
+  if (!input.name) return;
   guarded(async () => {
-    fillSettings(await api("/settings", { method: "POST", body: readSettings() }));
-    toast("Settings saved on the server.");
+    try {
+      fillSettings(await api("/settings", { method: "POST", body: { [input.name]: settingValue(input) } }));
+      const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
+      if (state.status?.state === "plotting") toast(`Applied: ${label}`);
+    } catch (err) {
+      input.blur();
+      if (state.status?.settings) fillSettings(state.status.settings);
+      throw err;
+    }
   });
 });
+settingsForm.addEventListener("submit", (e) => e.preventDefault());
 
 $("#settings-reset").addEventListener("click", () =>
   guarded(async () => fillSettings(await api("/settings", { method: "POST", body: { reset: true } }))),
@@ -379,6 +394,7 @@ function fmtTime(seconds) {
 
 function applyStatus(s) {
   state.status = s;
+  if (s.settings) fillSettings(s.settings);
   const total = s.paths_total || 0;
   const done = s.paths_done || 0;
   $("#progress-bar").style.width = total ? `${(100 * done) / total}%` : "0";
@@ -414,6 +430,14 @@ function updateControls() {
   for (const b of $$("[data-manual]")) {
     b.disabled = !state.online || !(s === "idle" || (s === "paused" && b.dataset.manual !== "disable_xy"));
   }
+  const live = new Set(state.info?.live_settings ?? []);
+  for (const input of settingsForm.elements) {
+    if (input.name) input.disabled = !state.online || (busy && !live.has(input.name));
+  }
+  $("#settings-reset").disabled = busy || !state.online;
+  $("#settings-hint").textContent = busy
+    ? "Speed and pen changes apply from the next move. Machine size, resolution, rotation and port are locked until the plot ends."
+    : "Changes are saved on the server as you make them.";
   $("#optimize-button").disabled = !state.original || !state.online;
   $("#revert-button").disabled = !state.optimized;
   $("#download-button").disabled = !state.current;
