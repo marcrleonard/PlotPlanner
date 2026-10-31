@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const AS_IS = { paper: null, merge: false, sort: false, reloop: false, simplify: false };
+const AS_IS = { paper: null, fit: false, merge: false, sort: false, reloop: false, simplify: false };
 const INKSCAPE = "http://www.inkscape.org/namespaces/inkscape";
 
 const state = {
@@ -95,6 +95,8 @@ function render(svgText, { tracking = false } = {}) {
   canvas.classList.toggle("pen", !tracking); // Prepare/Load show true pen width; Plot shows progress
   state.currentEl = null;
   $("#viewbar").hidden = false;
+  for (const id of ["#ruler-x", "#ruler-y", "#ruler-unit"]) $(id).hidden = false;
+  $(".stage").classList.add("rulers");
   view.apply();
   [canvas.scrollLeft, canvas.scrollTop] = scroll; // keep your place when the layout preview refreshes
   return svg;
@@ -142,6 +144,8 @@ const view = {
     svg.setAttribute("height", Math.max(1, Math.round(page.h * this.scale)));
     svg.style.setProperty("--pen", String(penWidth() * page.unitsPerMm));
     $("#zoom-label").textContent = `${Math.round((100 * this.scale) / this.pxPerMm)}%`;
+    drawOverlay(svg, page);
+    requestAnimationFrame(drawRulers);
     $$("[data-zoom]").forEach((b) => b.classList.toggle("active",
       (b.dataset.zoom === "fit" && this.mode === "fit") ||
       (b.dataset.zoom === "actual" && this.mode === "zoom" && Math.abs(this.scale - this.pxPerMm) < 1e-6)));
@@ -217,6 +221,111 @@ window.addEventListener("keydown", (e) => {
   e.preventDefault();
 });
 
+// Rulers, like an image editor's: zero is the sheet's top-left corner, which is where the pen
+// starts. They follow zoom and scroll; the drawing's extent is shaded once its layout is known.
+const RULER_STEPS = {
+  mm: { perMm: 1, steps: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500] },
+  in: { perMm: 1 / 25.4, steps: [1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 5, 10, 20] },
+};
+let rulerUnit = store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
+$("#ruler-unit").textContent = rulerUnit;
+$("#ruler-unit").addEventListener("click", () => {
+  rulerUnit = rulerUnit === "mm" ? "in" : "mm";
+  store.set("pp.rulerUnit", rulerUnit);
+  $("#ruler-unit").textContent = rulerUnit;
+  drawRulers();
+});
+
+function fmtRuler(value) {
+  if (rulerUnit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+  return String(Math.round(value * 1000) / 1000).replace(/^0\./, ".");
+}
+
+function drawRuler(el, horizontal, originPx, extent) {
+  const dpr = window.devicePixelRatio || 1;
+  const { width, height } = el.getBoundingClientRect();
+  el.width = Math.round(width * dpr);
+  el.height = Math.round(height * dpr);
+  const ctx = el.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const length = horizontal ? width : height;
+  const thick = horizontal ? height : width;
+  const { perMm, steps } = RULER_STEPS[rulerUnit];
+  const pxPerUnit = view.scale / perMm;
+  const label = steps.find((s) => s * pxPerUnit >= 48) ?? steps.at(-1);
+  const minor = steps.find((s) => s * pxPerUnit >= 6 && s <= label) ?? label;
+
+  if (extent) { // the drawing, shaded
+    ctx.fillStyle = "rgb(57 168 201 / 0.18)";
+    const a = originPx + extent[0] * view.scale;
+    const b = a + extent[1] * view.scale;
+    horizontal ? ctx.fillRect(a, 0, b - a, thick) : ctx.fillRect(0, a, thick, b - a);
+  }
+  ctx.strokeStyle = css.getPropertyValue("--muted").trim();
+  ctx.fillStyle = css.getPropertyValue("--muted").trim();
+  ctx.font = "9px system-ui, sans-serif";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const first = Math.floor(-originPx / pxPerUnit / minor) * minor;
+  for (let v = first; v * pxPerUnit + originPx <= length; v += minor) {
+    const p = Math.round(originPx + v * pxPerUnit) + 0.5;
+    const isLabel = Math.abs(v / label - Math.round(v / label)) < 1e-6;
+    const isHalf = Math.abs((2 * v) / label - Math.round((2 * v) / label)) < 1e-6;
+    const tick = isLabel ? thick : isHalf ? thick * 0.5 : thick * 0.28;
+    if (horizontal) { ctx.moveTo(p, thick); ctx.lineTo(p, thick - tick); }
+    else { ctx.moveTo(thick, p); ctx.lineTo(thick - tick, p); }
+    if (isLabel) {
+      const text = fmtRuler(v);
+      if (horizontal) ctx.fillText(text, p + 3, 9);
+      else { ctx.save(); ctx.translate(9, p + 3); ctx.rotate(Math.PI / 2); ctx.fillText(text, 0, 0); ctx.restore(); }
+    }
+  }
+  ctx.stroke();
+}
+
+function drawRulers() {
+  const svg = $("svg", canvas);
+  if (!svg || $("#ruler-x").hidden) return;
+  const r = svg.getBoundingClientRect();
+  const x = $("#ruler-x").getBoundingClientRect();
+  const y = $("#ruler-y").getBoundingClientRect();
+  const l = state.step === "prepare" ? state.layout : null;
+  const b = l && (l.options?.reference === "page" && l.box_mm ? l.box_mm : l.bounds_mm);
+  drawRuler($("#ruler-x"), true, r.left - x.left, b && [b[0], b[2]]);
+  drawRuler($("#ruler-y"), false, r.top - y.top, b && [b[1], b[3]]);
+}
+
+canvas.addEventListener("scroll", () => requestAnimationFrame(drawRulers));
+window.addEventListener("resize", () => requestAnimationFrame(drawRulers));
+
+// Size overlay: a dashed outline of a common size from the sheet's corner.
+const overlaySelect = $("#overlay");
+overlaySelect.value = store.get("pp.overlay", "");
+overlaySelect.addEventListener("change", () => {
+  store.set("pp.overlay", overlaySelect.value);
+  view.apply();
+});
+
+function drawOverlay(svg, page) {
+  svg.querySelectorAll(".overlay, .overlay-label").forEach((el) => el.remove());
+  if (!overlaySelect.value) return;
+  const [w, h] = overlaySelect.value.split("x").map(Number);
+  const u = page.unitsPerMm;
+  const NS = "http://www.w3.org/2000/svg";
+  const rect = document.createElementNS(NS, "rect");
+  for (const [k, v] of Object.entries({ x: 0, y: 0, width: w * u, height: h * u })) rect.setAttribute(k, v);
+  rect.setAttribute("class", "overlay");
+  const text = document.createElementNS(NS, "text");
+  text.setAttribute("class", "overlay-label");
+  text.setAttribute("x", (w - 2) * u);
+  text.setAttribute("y", (h - 2) * u);
+  text.setAttribute("text-anchor", "end");
+  text.setAttribute("font-size", 3.5 * u);
+  text.textContent = overlaySelect.selectedOptions[0].textContent;
+  svg.append(rect, text);
+}
+
 // Calibration: size a bank card outline to match a real one; that gives this screen's px per mm.
 const CARD_MM = [85.6, 53.98];
 const calibrateDialog = $("#calibrate-dialog");
@@ -268,7 +377,9 @@ function describe(svgText) {
     .filter((g) => g.getAttributeNS(INKSCAPE, "groupmode") === "layer")
     .map((g) => g.getAttributeNS(INKSCAPE, "label") || g.id);
   const physical = /\d\s*(mm|cm|in|pt|pc|q)\s*$/i.test(svg.getAttribute("width") || "");
-  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers, physical };
+  const pageMm = [lengthMm(svg.getAttribute("width")), lengthMm(svg.getAttribute("height"))];
+  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers, physical,
+    pageMm: pageMm.every(Boolean) ? pageMm : null };
 }
 
 function kv(el, rows) {
@@ -319,6 +430,18 @@ function loadText(text, name) {
   // (pixel) files have no size to keep, so they default to the paper presets.
   const paper = $("#paper");
   paper.value = d.physical ? "source" : state.info?.optimize_defaults.paper ?? "a3";
+  // A file with a real size plots at that size; a unitless one has no size to keep, so it is
+  // scaled to the margins instead.
+  $("#optimize-form").fit.checked = !d.physical;
+  if (!d.physical) $("#optimize-form").size_mode.value = "width";
+  // A file with a real size was designed on its page (a card with its padding, say): size and place
+  // by that page. A unitless file's page means nothing, so use its lines.
+  state.docPageMm = d.pageMm;
+  const reference = $("#optimize-form").reference;
+  reference.value = d.physical ? "page" : "lines";
+  reference.options[0].textContent = d.physical
+    ? `The file's page (${d.width} × ${d.height})` : "The file's page";
+  showMode();
   $("#custom-size").hidden = true;
   $("#layout-info").hidden = $("#layout-warnings").hidden = true; // the new file's layout is on its way
   kv($("#doc-info"), [
@@ -363,14 +486,46 @@ function paperValue() {
   return f.paper.value;
 }
 
-function optimizeOptions() {
+function prepareMode() {
+  return $("#optimize-form").mode.value;
+}
+
+// The machine's reach for the Machine size setting; Quick plot uses it as the sheet, so nothing is
+// rotated or clipped beyond what the plotter can draw.
+function machineReach() {
+  const settings = state.status?.settings ?? state.info?.settings ?? {};
+  return state.info?.machine_travel_mm?.[settings.model] ?? [430, 297];
+}
+
+function placementOptions() {
   const f = $("#optimize-form");
+  if (prepareMode() === "quick") {
+    const [w, h] = machineReach();
+    return {
+      paper: `${w}x${h}mm`,
+      orientation: "landscape",
+      margin: Number(f.quick_offset.value) || 0,
+      fit: false,
+      position: "top-left",
+      width: f.size_mode.value === "width" ? Number(f.quick_width.value) || null : null,
+    };
+  }
   return {
     paper: paperValue(),
     orientation: f.orientation.value,
-    layers_from: f.layers_from.value,
     margin: Number(f.margin.value) || 0,
     fit: f.fit.checked,
+    position: f.position.value,
+    width: null,
+  };
+}
+
+function optimizeOptions() {
+  const f = $("#optimize-form");
+  return {
+    ...placementOptions(),
+    reference: f.reference.value,
+    layers_from: f.layers_from.value,
     merge: f.merge.checked,
     sort: f.sort.checked,
     two_opt: f.two_opt.checked,
@@ -441,7 +596,30 @@ function applyPrepared(result, optimized) {
 // Layout preview: the sheet at the chosen size with the drawing placed on it, exactly as it will
 // plot. Changing a layout field re-runs only vpype's layout (quick); Optimize adds the sorting.
 const PX_PER_MM = 96 / 25.4;
-const LAYOUT_FIELDS = ["paper", "paper_w", "paper_h", "orientation", "margin", "fit", "layers_from"];
+const LAYOUT_FIELDS = ["mode", "reference", "size_mode", "quick_width", "quick_offset",
+  "paper", "paper_w", "paper_h", "orientation", "margin", "fit", "position", "layers_from"];
+
+function showMode() {
+  const f = $("#optimize-form");
+  $$("[data-mode]", f).forEach((el) => (el.hidden = el.dataset.mode !== prepareMode()));
+  $("[data-size=width]", f).hidden = f.size_mode.value !== "width";
+}
+
+{
+  const f = $("#optimize-form");
+  const saved = store.get("pp.mode", "quick");
+  for (const radio of f.mode) radio.checked = radio.value === saved;
+  showMode();
+  f.addEventListener("change", (e) => {
+    if (e.target.name === "mode") store.set("pp.mode", prepareMode());
+    if (e.target.name === "size_mode" && f.size_mode.value === "width") {
+      // Start from the current width of whatever sizing is measured by.
+      const width = f.reference.value === "page" && state.docPageMm ? state.docPageMm[0] : state.layout?.bounds_mm?.[2];
+      if (width) f.quick_width.value = Math.round(width);
+    }
+    if (e.target.name === "mode" || e.target.name === "size_mode") showMode();
+  });
+}
 
 function showLayout() {
   render(state.current);
@@ -449,7 +627,16 @@ function showLayout() {
   const svg = $("svg", canvas);
   if (!result?.page_mm || !svg) return;
   const opts = result.options;
-  if (opts.paper && opts.fit && opts.margin > 0) {
+  // When sizing by the file's page, outline where that page (the card) lands.
+  if (opts.reference === "page" && result.box_mm) {
+    const [x, y, w, h] = result.box_mm;
+    const card = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    for (const [k, v] of Object.entries({ x, y, width: w, height: h })) card.setAttribute(k, v * PX_PER_MM);
+    card.setAttribute("class", "guide card");
+    svg.append(card);
+  }
+  // Margin guide wherever the margin matters: scaling to fit, or anchoring to an edge.
+  if (prepareMode() === "layout" && opts.margin > 0 && (opts.fit || !["keep", "center"].includes(opts.position))) {
     const [w, h] = result.page_mm;
     const m = opts.margin;
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -458,6 +645,7 @@ function showLayout() {
     svg.append(rect);
   }
   layoutInfo();
+  drawRulers();
 }
 
 function fmtMm([w, h]) {
@@ -472,9 +660,14 @@ function layoutInfo() {
   }
   const [pw, ph] = result.page_mm;
   const orientation = pw > ph ? "landscape" : pw < ph ? "portrait" : "square";
-  const paperName = result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
+  const paperName = prepareMode() === "quick" ? "Plotter reach"
+    : result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
   const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
-  if (result.bounds_mm) rows.push(["Drawing", fmtMm(result.bounds_mm.slice(2))]);
+  if (result.options.reference === "page" && result.box_mm) {
+    const [x, y, w, h] = result.box_mm;
+    rows.push(["Page", `${fmtMm([w, h])} at ${Math.round(x)}, ${Math.round(y)} mm`]);
+  }
+  if (result.bounds_mm) rows.push(["Lines", fmtMm(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
 
   const warnings = [];
@@ -522,6 +715,13 @@ function previewLayout() {
       updateControls();
     }
   }, 300);
+}
+
+{
+  const position = $("#optimize-form").position;
+  position.value = store.get("pp.position", "keep");
+  if (!position.value) position.value = "keep";
+  position.addEventListener("change", () => store.set("pp.position", position.value));
 }
 
 $("#optimize-form").addEventListener("input", (e) => {
@@ -694,6 +894,7 @@ settingsForm.addEventListener("change", (e) => {
       fillSettings(settings);
       if (state.status) state.status.settings = settings;
       layoutInfo(); // the reach warning depends on machine size and auto-rotate
+      if (input.name === "model" && prepareMode() === "quick") previewLayout(); // the sheet is the reach
       const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
       if (state.status?.state === "plotting") toast(`Applied: ${label}`);
     } catch (err) {

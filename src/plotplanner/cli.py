@@ -20,6 +20,8 @@ def optimize_options(func):
         click.option("--orientation", type=click.Choice(opt.ORIENTATIONS), default="auto", show_default=True),
         click.option("--margin", type=float, default=15.0, show_default=True, help="Margin in mm."),
         click.option("--fit/--no-fit", default=True, show_default=True, help="Scale to fill the margins."),
+        click.option("--position", type=click.Choice(opt.POSITIONS), default="keep", show_default=True,
+                     help="Where the drawing sits: as placed, centre, or anchored margin-in from an edge or corner."),
         click.option("--two-opt", is_flag=True, help="Slower, shorter travel."),
         click.option("--reloop", is_flag=True, help="Re-pick start points of closed paths."),
         click.option("--merge-gap", type=float, default=0.35, show_default=True,
@@ -34,10 +36,10 @@ def optimize_options(func):
     return func
 
 
-def _options(paper, orientation, margin, fit, two_opt, reloop, merge_gap, min_length, layers_from) -> opt.OptimizeOptions:
+def _options(paper, orientation, margin, fit, position, two_opt, reloop, merge_gap, min_length, layers_from) -> opt.OptimizeOptions:
     return opt.OptimizeOptions.from_dict(
-        dict(paper=paper, orientation=orientation, margin=margin, fit=fit, two_opt=two_opt, reloop=reloop,
-             merge_tolerance=merge_gap, min_length=min_length, layers_from=layers_from)
+        dict(paper=paper, orientation=orientation, margin=margin, fit=fit, position=position, two_opt=two_opt,
+             reloop=reloop, merge_tolerance=merge_gap, min_length=min_length, layers_from=layers_from)
     )
 
 

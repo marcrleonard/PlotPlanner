@@ -114,3 +114,62 @@ def test_merge_gap_joins_ends_closer_than_a_pen_width():
 
 def test_min_length_drops_specks():
     assert optimize.optimize(BROKEN, {"paper": None, "min_length": 0.5})["after"]["paths"] == 1
+
+
+def test_position_anchors_the_drawing_margin_in_from_the_edges(sample_svg):
+    def bounds(**opts):
+        return optimize.optimize(sample_svg, {"paper": "a4", "orientation": "landscape", "margin": 10, **opts})["bounds_mm"]
+
+    x, y, w, h = bounds(fit=False, position="top-left")
+    assert (round(x, 1), round(y, 1)) == (10.0, 10.0)
+    x, y, w, h = bounds(fit=False, position="bottom-right")
+    assert (round(x + w, 1), round(y + h, 1)) == (287.0, 200.0)
+    x, y, w, h = bounds(fit=False, position="center")
+    assert abs((x + w / 2) - 148.5) < 0.1 and abs((y + h / 2) - 105) < 0.1
+    x, y, w, h = bounds(fit=True, position="top-left")  # scaled to the margins, then anchored
+    assert (round(x, 1), round(y, 1)) == (10.0, 10.0) and (round(w) == 277 or round(h) == 190)
+
+
+def test_keep_leaves_the_drawing_where_it_was(sample_svg):
+    source = optimize.optimize(sample_svg, optimize.AS_IS)["bounds_mm"]
+    on_a3 = optimize.optimize(sample_svg, {"paper": "a3", "fit": False, "position": "keep"})["bounds_mm"]
+    assert [round(v, 1) for v in on_a3] == [round(v, 1) for v in source]
+
+
+def test_bad_position():
+    import pytest
+
+    with pytest.raises(ValueError):
+        optimize.OptimizeOptions.from_dict({"position": "middle-earth"})
+
+
+def test_width_scales_the_drawing_keeping_proportions(sample_svg):
+    natural = optimize.optimize(sample_svg, optimize.AS_IS)["bounds_mm"]
+    sized = optimize.optimize(sample_svg, {"paper": "430x297mm", "orientation": "landscape", "fit": False,
+                                           "position": "top-left", "margin": 10, "width": 100})["bounds_mm"]
+    assert [round(v, 1) for v in sized[:3]] == [10.0, 10.0, 100.0]
+    assert abs(sized[3] - natural[3] * 100 / natural[2]) < 0.1
+
+
+CARD = "tests/data/card_6x4in.svg"  # a 6 x 4 in page whose lines sit inside ~0.3 in of padding
+
+
+def test_reference_page_places_the_whole_card():
+    svg = open(CARD).read()
+    quick = {**optimize.AS_IS.__dict__, "paper": "430x297mm", "orientation": "landscape", "position": "top-left",
+             "margin": 10}
+    by_lines = optimize.optimize(svg, {**quick, "reference": "lines"})["bounds_mm"]
+    by_page = optimize.optimize(svg, {**quick, "reference": "page"})["bounds_mm"]
+    # by lines: the lines start 10 mm in; by page: the card's corner is 10 mm in, its padding kept
+    assert [round(v, 1) for v in by_lines[:2]] == [10.0, 10.0]
+    assert abs(by_page[0] - (10 + 0.385 * 25.4)) < 0.3 and abs(by_page[1] - (10 + 0.269 * 25.4)) < 0.3
+    assert abs(by_page[2] - by_lines[2]) < 0.1  # same size either way: as drawn
+
+
+def test_reference_page_width_scales_the_card():
+    svg = open(CARD).read()
+    result = optimize.optimize(svg, {**optimize.AS_IS.__dict__, "paper": "430x297mm", "orientation": "landscape",
+                                     "position": "top-left", "margin": 0, "width": 76.2, "reference": "page"})
+    # card 6 in -> 3 in wide: the lines halve too, and keep their padding (halved)
+    x, y, w, h = result["bounds_mm"]
+    assert abs(w - 5.231 * 25.4 / 2) < 0.2 and abs(x - 0.385 * 25.4 / 2) < 0.2
