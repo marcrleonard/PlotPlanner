@@ -115,7 +115,8 @@ function describe(svgText) {
   const layers = $$("g", svg)
     .filter((g) => g.getAttributeNS(INKSCAPE, "groupmode") === "layer")
     .map((g) => g.getAttributeNS(INKSCAPE, "label") || g.id);
-  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers };
+  const physical = /\d\s*(mm|cm|in|pt|pc|q)\s*$/i.test(svg.getAttribute("width") || "");
+  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers, physical };
 }
 
 function kv(el, rows) {
@@ -162,6 +163,12 @@ function loadText(text, name) {
   }
   Object.assign(state, { original: text, current: text, prepared: false, optimized: false, fileName: name, layers: [], plotId: null, completed: 0, layout: null });
   const d = describe(text);
+  // A file with a real size (mm, cm, in, ...) is already laid out: keep it as it is. Unitless
+  // (pixel) files have no size to keep, so they default to the paper presets.
+  const paper = $("#paper");
+  paper.value = d.physical ? "source" : state.info?.optimize_defaults.paper ?? "a3";
+  $("#custom-size").hidden = true;
+  $("#layout-info").hidden = $("#layout-warnings").hidden = true; // the new file's layout is on its way
   kv($("#doc-info"), [
     ["File", name],
     ["Size", `${d.width} × ${d.height}`],
@@ -274,12 +281,13 @@ function layoutInfo() {
   }
   const settings = state.status?.settings ?? state.info?.settings ?? {};
   const reach = state.info?.machine_travel_mm?.[settings.model];
-  if (reach) {
-    // Portrait pages are plotted rotated onto the long axis when auto-rotate is on.
-    const plotted = settings.auto_rotate && ph > pw ? [ph, pw] : [pw, ph];
-    if (plotted[0] > reach[0] + 0.5 || plotted[1] > reach[1] + 0.5) {
-      warnings.push(`This paper is bigger than the plotter reaches (${fmtMm(reach)}, the Machine size setting). ` +
-        "Drawing beyond that from the home corner is clipped.");
+  if (reach && b) {
+    // How far from the home corner the pen has to go. Portrait pages are plotted rotated onto
+    // the long axis when auto-rotate is on: machine x = page y, machine y = page width - page x.
+    const far = settings.auto_rotate && ph > pw ? [b[1] + b[3], pw - b[0]] : [b[0] + b[2], b[1] + b[3]];
+    if (far[0] > reach[0] + 0.5 || far[1] > reach[1] + 0.5) {
+      warnings.push(`The drawing goes past what the plotter reaches (${fmtMm(reach)} from the home corner, ` +
+        "the Machine size setting). The part beyond that is clipped.");
     }
   }
   const list = $("#layout-warnings");

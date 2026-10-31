@@ -62,7 +62,7 @@ To install the command globally: `uv tool install git+https://github.com/marcrle
 
 | | |
 |---|---|
-| **Layout** | Paper presets (A6 to A2, Letter, Legal, Tabloid) or a custom size, with orientation, margins, and scale-to-fit or centre-only. The preview updates as you change them, shows the drawing's size in mm, and warns when the drawing runs off the paper or the paper is bigger than the machine reaches. |
+| **Layout** | A file with a real size (mm, cm, in) plots at that size on its own page by default. Otherwise choose a paper preset (A6 to A2, Letter, Legal, Tabloid) or a custom size, with orientation, margins, and scale-to-fit or centre-only. The preview updates as you change them, shows the drawing's size in mm, and warns when the drawing runs off the paper or past what the machine can reach. |
 | **Optimize** | vpype's `linemerge`, `linesort` (optionally two-opt), `reloop` and `linesimplify`. You see pen-up travel before and after, typically 80%+ less, and can download the optimized SVG. |
 | **Layers and pens** | Each top-level group (Inkscape layer, LineDream `Group(label=…)` or plain `<g>`) becomes a layer, and drawing outside any group gets its own. Or make one layer per stroke colour. Plot one layer, or all of them with a pause before each layer to swap pens. |
 | **Plot** | Live progress on the preview, with paths done, the current path and time left. Pause, resume, and stop-and-home. Pen up, pen down and motors off for setup. |
