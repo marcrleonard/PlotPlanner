@@ -22,6 +22,10 @@ def optimize_options(func):
         click.option("--fit/--no-fit", default=True, show_default=True, help="Scale to fill the margins."),
         click.option("--two-opt", is_flag=True, help="Slower, shorter travel."),
         click.option("--reloop", is_flag=True, help="Re-pick start points of closed paths."),
+        click.option("--merge-gap", type=float, default=0.35, show_default=True,
+                     help="Join line ends closer than this, in mm (about your pen's line width)."),
+        click.option("--min-length", type=float, default=0.0, show_default=True,
+                     help="Drop lines shorter than this, in mm (0 keeps everything)."),
         click.option("--layers-from", type=click.Choice(opt.LAYER_SOURCES), default="groups", show_default=True,
                      help="What becomes a layer (a pen): top-level groups or stroke colours."),
     ]
@@ -30,10 +34,10 @@ def optimize_options(func):
     return func
 
 
-def _options(paper, orientation, margin, fit, two_opt, reloop, layers_from) -> opt.OptimizeOptions:
+def _options(paper, orientation, margin, fit, two_opt, reloop, merge_gap, min_length, layers_from) -> opt.OptimizeOptions:
     return opt.OptimizeOptions.from_dict(
         dict(paper=paper, orientation=orientation, margin=margin, fit=fit, two_opt=two_opt, reloop=reloop,
-             layers_from=layers_from)
+             merge_tolerance=merge_gap, min_length=min_length, layers_from=layers_from)
     )
 
 

@@ -270,3 +270,7 @@ dialog h2 { margin: 0; font-size: 26px; }
 }
 .canvas svg .guide { fill: none; stroke: var(--accent); stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; stroke-width: 1px; pointer-events: none; }
 .canvas.updating svg { opacity: 0.55; transition: opacity 0.2s; }
+
+#advanced { margin-top: 6px; border-top: 0; padding-top: 0; }
+#advanced summary { font-weight: 500; margin-bottom: 6px; }
+#advanced .buttons { margin: 4px 0 0; }
