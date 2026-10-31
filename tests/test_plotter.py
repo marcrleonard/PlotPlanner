@@ -240,3 +240,16 @@ def test_home_only_while_paused(fake_ebb, prepared):
     p = Plotter()
     with pytest.raises(PlotterBusy):
         p.home()
+
+
+def test_pen_buttons_always_move_the_pen(fake_ebb):
+    # After a height change the EBB still says "up", and the driver would skip the move;
+    # the buttons must go to the newly set height regardless.
+    p = Plotter()
+    p.manual("raise_pen")
+    p.update_settings({"pen_pos_up": 10})
+    p.manual("raise_pen")
+    assert any(c.startswith("SP,1") for c in fake_ebb.instances[-1].commands)
+    p.manual("lower_pen")
+    p.manual("lower_pen")
+    assert any(c.startswith("SP,0") for c in fake_ebb.instances[-1].commands)

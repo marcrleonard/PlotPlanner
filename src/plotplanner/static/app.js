@@ -864,19 +864,36 @@ const settingsForm = $("#settings-form");
 
 // Fill the form from the server. Skips the control being edited, so another client's (or the
 // server's) values never yank a slider out from under you.
+// Pen positions are shown as heights (higher number, higher pen). On the iDraw the servo works the
+// other way round (a lower position number is a higher pen), so those two are mirrored.
+const PEN_FIELDS = ["pen_pos_up", "pen_pos_down"];
+
+function penHeight(name, value) {
+  return PEN_FIELDS.includes(name) && state.info?.pen_reversed ? 100 - value : value;
+}
+
 function fillSettings(settings) {
-  for (const [key, value] of Object.entries(settings)) {
+  for (const [key, raw] of Object.entries(settings)) {
     const input = settingsForm.elements[key];
     if (!input || input === document.activeElement) continue;
+    const value = penHeight(key, raw);
     if (input.type === "checkbox") input.checked = Boolean(value);
     else if (String(input.value) !== String(value)) input.value = value;
     else continue;
     input.dispatchEvent(new Event("input"));
   }
+  penWarning();
 }
 
 function settingValue(input) {
-  return input.type === "checkbox" ? input.checked : input.type === "text" ? input.value : Number(input.value);
+  if (input.type === "checkbox") return input.checked;
+  if (input.type === "text") return input.value;
+  return penHeight(input.name, Number(input.value)); // mirrored back for the plotter
+}
+
+function penWarning() {
+  const f = settingsForm.elements;
+  $("#pen-warning").hidden = Number(f.pen_pos_up.value) > Number(f.pen_pos_down.value);
 }
 
 function readSettings() {
@@ -887,7 +904,10 @@ function readSettings() {
 
 $$('input[type="range"]', settingsForm).forEach((input) => {
   const output = input.parentElement.querySelector("output");
-  input.addEventListener("input", () => (output.textContent = input.value));
+  input.addEventListener("input", () => {
+    output.textContent = input.value;
+    if (PEN_FIELDS.includes(input.name)) penWarning();
+  });
 });
 
 // Every control applies when you let go of it; during a plot the server hands speed and pen
@@ -903,7 +923,12 @@ settingsForm.addEventListener("change", (e) => {
       layoutInfo(); // the reach warning depends on machine size and auto-rotate
       if (input.name === "model" && prepareMode() === "quick") previewLayout(); // the sheet is the reach
       const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
-      if (state.status?.state === "plotting") toast(`Applied: ${label}`);
+      const s = state.status?.state ?? "idle";
+      if (s === "plotting") toast(`Applied: ${label}`);
+      // Idle or paused: move the pen to the height just set, so it can be dialled in by eye.
+      if (PEN_FIELDS.includes(input.name) && (s === "idle" || s === "paused")) {
+        await api("/manual", { method: "POST", body: { command: input.name === "pen_pos_up" ? "raise_pen" : "lower_pen" } });
+      }
     } catch (err) {
       input.blur();
       if (state.status?.settings) fillSettings(state.status.settings);

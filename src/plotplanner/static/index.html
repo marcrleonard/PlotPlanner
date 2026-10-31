@@ -181,8 +181,11 @@
         <details id="settings">
           <summary>Plotter settings</summary>
           <form id="settings-form" class="form">
-            <label>Pen up <output></output><input name="pen_pos_up" type="range" min="0" max="100"></label>
-            <label>Pen down <output></output><input name="pen_pos_down" type="range" min="0" max="100"></label>
+            <label>Pen up height <output></output><input name="pen_pos_up" type="range" min="0" max="100"></label>
+            <label>Pen down height <output></output><input name="pen_pos_down" type="range" min="0" max="100"></label>
+            <p class="hint">Higher number, higher pen. The pen moves to a height as you set it.</p>
+            <ul id="pen-warning" class="warnings" hidden><li>Pen up is set at or below pen down, so lifting
+              the pen would move it the wrong way.</li></ul>
             <label>Drawing speed <output></output><input name="speed_pendown" type="range" min="1" max="110"></label>
             <label>Travel speed <output></output><input name="speed_penup" type="range" min="1" max="110"></label>
             <label>Acceleration <output></output><input name="accel" type="range" min="1" max="100"></label>

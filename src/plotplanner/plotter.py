@@ -133,6 +133,7 @@ class Plotter:
             ad = driver.Driver(message=lambda m: (output.append(str(m).strip()), self._message(m)))
             ad.configure(None, self.settings, mode="manual", preview=self.preview)
             ad.options.manual_cmd = command
+            ad.force_pen = command in ("raise_pen", "lower_pen")
             ad.plot_run()
             return [m for m in output if m]
 

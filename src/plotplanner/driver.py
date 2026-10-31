@@ -69,6 +69,13 @@ def machine_travel_mm() -> dict[int, list[float]]:
     return {model: [round(x * 25.4), round(y * 25.4)] for model, (x, y) in travel.items()}
 
 
+def pen_heights_reversed() -> bool:
+    """True when a lower pen position number means a higher pen, as on the iDraw (its own defaults
+    are up 20, down 45; stock AxiDraw's are up 60, down 30)."""
+    p = axidraw.AxiDraw(default_logging=False).params
+    return p.pen_pos_up < p.pen_pos_down
+
+
 MANUAL_COMMANDS = ["raise_pen", "lower_pen", "enable_xy", "disable_xy", "fw_version"]
 
 
@@ -112,6 +119,7 @@ class Driver(axidraw.AxiDraw):
         self._pause_requested = pause_requested
         self._take_live_settings = take_live_settings
         self._remote_pause = False
+        self.force_pen = False  # manual raise/lower: move even if the EBB says the pen is already there
         self._entering: str | None = None  # name of the "!" layer being entered
         self.pen_change: str | None = None  # set when the plot stopped for a pen change: the next layer
 
@@ -146,6 +154,11 @@ class Driver(axidraw.AxiDraw):
 
     def ServoSetupWrapper(self):  # noqa: N802 - overrides the driver's name
         super().ServoSetupWrapper()
+        if self.options.mode == "manual" and self.force_pen:
+            # The EBB only knows up or down, not at which height; after a height change it would skip
+            # the move. Forget the state so pen_raise()/pen_lower() always go to the set height.
+            self.pen_up = None
+            return
         if self.options.mode in ("res_plot", "res_home") and not self.options.preview:
             # Resuming. The driver only trusts the EBB's idea of the pen, and pen_raise() does nothing
             # in resume mode, so a pen that is physically down here (lowered by hand while paused,

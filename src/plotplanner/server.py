@@ -95,6 +95,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             positions=optimize.POSITIONS,
             layer_sources=optimize.LAYER_SOURCES,
             machine_travel_mm=driver.machine_travel_mm(),
+            pen_reversed=driver.pen_heights_reversed(),
             optimize_defaults=optimize.OptimizeOptions().__dict__,
             settings=plotter.settings,
             setting_defaults=driver.DEFAULT_SETTINGS,
