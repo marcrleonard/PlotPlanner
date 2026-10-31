@@ -136,12 +136,13 @@ button, input, select { font: inherit; color: inherit; }
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 8px 24px rgb(0 0 0 / 0.08);
 }
 
-/* True pen width: --pen is the pen width in the drawing's own units, set per render. */
+/* True pen width: --pen is the pen width in screen px at the current zoom. non-scaling-stroke keeps
+   it that wide inside transformed groups too (a group scaled to 1/360 would otherwise shrink it). */
 .canvas.pen svg :is(path, line, polyline, polygon, rect, circle, ellipse):not(.guide, .overlay) {
   stroke-width: var(--pen);
   stroke-linecap: round;
   stroke-linejoin: round;
-  vector-effect: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .viewbar {
@@ -247,6 +248,7 @@ summary { cursor: pointer; font-weight: 600; margin-bottom: 10px; }
 .state.paused { color: #d6a128; }
 .state.plotting { color: var(--accent); }
 .state.stopping { color: var(--danger); }
+.state.homing { color: var(--accent); }
 .pen-change {
   margin-top: 8px;
   padding: 10px 12px;

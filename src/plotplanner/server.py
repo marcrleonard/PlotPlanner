@@ -145,6 +145,11 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
         plotter.resume()
         return jsonify(plotter.status())
 
+    @app.post("/api/home")
+    def home():
+        plotter.home()
+        return jsonify(plotter.status())
+
     @app.post("/api/stop")
     def stop():
         plotter.stop()

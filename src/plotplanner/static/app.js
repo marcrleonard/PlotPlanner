@@ -142,7 +142,7 @@ const view = {
     if (this.mode === "fit") this.scale = this.fitScale(page);
     svg.setAttribute("width", Math.max(1, Math.round(page.w * this.scale)));
     svg.setAttribute("height", Math.max(1, Math.round(page.h * this.scale)));
-    svg.style.setProperty("--pen", String(penWidth() * page.unitsPerMm));
+    svg.style.setProperty("--pen", `${penWidth() * this.scale}px`);
     $("#zoom-label").textContent = `${Math.round((100 * this.scale) / this.pxPerMm)}%`;
     drawOverlay(svg, page);
     requestAnimationFrame(drawRulers);
@@ -834,6 +834,13 @@ $("#pause-button").addEventListener("click", (e) =>
   }, e.currentTarget),
 );
 
+$("#home-button").addEventListener("click", (e) =>
+  guarded(async () => {
+    await api("/home", { method: "POST" });
+    poll();
+  }, e.currentTarget),
+);
+
 $("#stop-button").addEventListener("click", (e) => {
   if (!confirm("Stop the plot and send the pen home?")) return;
   guarded(async () => {
@@ -960,7 +967,8 @@ function updateControls() {
   $("#plot-button").disabled = busy || !state.current || !state.online;
   $("#pause-button").disabled = !(s === "plotting" || s === "paused");
   $("#pause-button").textContent = s === "paused" ? "Resume" : "Pause";
-  $("#stop-button").disabled = !(s === "plotting" || s === "paused");
+  $("#stop-button").disabled = !(s === "plotting" || s === "paused" || s === "homing");
+  $("#home-button").disabled = s !== "paused";
   $("#layer").disabled = busy || state.layers.length < 2;
   $("#pen-changes").disabled = busy || state.layers.length < 2 || Boolean($("#layer").value);
   for (const b of $$("[data-manual]")) {
@@ -1016,7 +1024,7 @@ async function poll() {
   }
   updateControls();
   const s = state.status?.state;
-  pollTimer = setTimeout(poll, s === "plotting" || s === "stopping" ? 1000 : 3000);
+  pollTimer = setTimeout(poll, s === "plotting" || s === "stopping" || s === "homing" ? 1000 : 3000);
 }
 
 // ------------------------------------------------------------------ server

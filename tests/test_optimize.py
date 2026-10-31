@@ -173,3 +173,16 @@ def test_reference_page_width_scales_the_card():
     # card 6 in -> 3 in wide: the lines halve too, and keep their padding (halved)
     x, y, w, h = result["bounds_mm"]
     assert abs(w - 5.231 * 25.4 / 2) < 0.2 and abs(x - 0.385 * 25.4 / 2) < 0.2
+
+
+def test_percent_layers_are_never_plotted():
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+         width="100mm" height="50mm" viewBox="0 0 100 50">
+      <g inkscape:groupmode="layer" inkscape:label="% guides (do not plot)" stroke="#9aa">
+        <rect x="0" y="0" width="100" height="50"/><line x1="50" y1="0" x2="50" y2="50"/>
+      </g>
+      <g inkscape:groupmode="layer" inkscape:label="1 ink"><path d="M10 10 L40 40" stroke="#000"/></g>
+    </svg>"""
+    for layers_from in ("groups", "color"):
+        result = optimize.optimize(svg, {**optimize.AS_IS.__dict__, "layers_from": layers_from})
+        assert result["paths"] == 1 and len(result["layers"]) == 1

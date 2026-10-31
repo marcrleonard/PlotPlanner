@@ -197,3 +197,46 @@ def test_no_pen_change_pause_for_a_single_layer(fake_ebb, fast, prepared):
     p.plot(prepared, layer=2, pen_changes=True)
     assert p.wait(60)
     assert p.status()["state"] == IDLE and p.status()["completed"] == ["pp_3", "pp_4"]
+
+
+def first(commands, prefix):
+    return next((i for i, c in enumerate(commands) if c.startswith(prefix)), None)
+
+
+def test_resume_raises_the_pen_before_moving(fake_ebb, fast, prepared):
+    # The pen-swap bug: lowering the pen by hand while paused (or the servo timing out) left it down,
+    # and resume only trusted the EBB, so the next travel move dragged a line.
+    p = Plotter()
+    p.plot(prepared)
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    p.pause()
+    p.wait(20)
+    p.manual("lower_pen")
+    p.resume()
+    assert p.wait(60) and p.status()["paths_done"] == 4
+    resumed = fake_ebb.instances[-1].commands
+    raise_at, move_at = first(resumed, "SP,1"), first(resumed, "SM,")
+    assert raise_at is not None and move_at is not None and raise_at < move_at
+
+
+def test_home_while_paused_then_resume(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared)
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    p.pause()
+    p.wait(20)
+    done = p.status()["paths_done"]
+    p.home()
+    assert p.wait(30)
+    s = p.status()
+    assert s["state"] == PAUSED and s["paths_done"] == done
+    homing = fake_ebb.instances[-1].commands
+    assert first(homing, "SP,1") < first(homing, "SM,")  # pen up, then the trip home
+    p.resume()  # back out to where it paused, and on
+    assert p.wait(60) and p.status()["state"] == IDLE and p.status()["paths_done"] == 4
+
+
+def test_home_only_while_paused(fake_ebb, prepared):
+    p = Plotter()
+    with pytest.raises(PlotterBusy):
+        p.home()

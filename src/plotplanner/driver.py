@@ -144,6 +144,18 @@ class Driver(axidraw.AxiDraw):
         if self.plot_current_layer and not self.b_stopped:
             self._on_path_done(path_id)
 
+    def ServoSetupWrapper(self):  # noqa: N802 - overrides the driver's name
+        super().ServoSetupWrapper()
+        if self.options.mode in ("res_plot", "res_home") and not self.options.preview:
+            # Resuming. The driver only trusts the EBB's idea of the pen, and pen_raise() does nothing
+            # in resume mode, so a pen that is physically down here (lowered by hand while paused,
+            # drooped after the servo timed out, or re-heightened) would be dragged along the moves to
+            # come. Physically raise it first, whatever the EBB says.
+            resuming, self.resume_mode = self.resume_mode, False
+            self.pen_up = None
+            self.pen_raise()
+            self.resume_mode = resuming
+
     def DoWePlotLayer(self, str_layer_name):  # noqa: N802 - overrides the driver's name
         # A layer named "!..." makes the driver pause inside this call; remember which one.
         name = str(str_layer_name).strip()

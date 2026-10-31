@@ -11,7 +11,7 @@ from . import driver, optimize
 
 log = logging.getLogger(__name__)
 
-IDLE, PLOTTING, PAUSED, STOPPING = "idle", "plotting", "paused", "stopping"
+IDLE, PLOTTING, PAUSED, STOPPING, HOMING = "idle", "plotting", "paused", "stopping", "homing"
 DRIVER_LOGGERS = ("axidrawinternal", "plotink")
 
 
@@ -95,6 +95,16 @@ class Plotter:
                 raise PlotterBusy(f"cannot resume while {self.state}")
             self._start("res_plot", self._resume_svg)
 
+    def home(self) -> None:
+        """While paused: drive back to the start corner, pen up. Resume still picks up where it paused."""
+        with self._lock:
+            if self.state != PAUSED:
+                raise PlotterBusy("home is available while paused (stop already returns home)")
+            pen_change = self.pen_change
+            self._message("Returning home; Resume continues where it paused.")
+            self._start("res_home", self._resume_svg, state=HOMING)
+            self.pen_change = pen_change
+
     def stop(self) -> None:
         """Stop the plot, raise the pen and drive home."""
         with self._lock:
@@ -106,6 +116,8 @@ class Plotter:
                 self._stop.set()
                 self._message("Stopping: returning home.")
                 self._start("res_home", self._resume_svg, state=STOPPING)
+            elif self.state == HOMING:
+                self._stop.set()  # finish the trip home, then forget the plot
             elif self.state != STOPPING:
                 raise PlotterBusy("nothing to stop")
 
@@ -204,7 +216,11 @@ class Plotter:
                 stopped = False
             with self._lock:
                 self.current_path = None
-                if stopped:
+                if mode == "res_home" and not self._stop.is_set():
+                    # Home from a pause: still paused, and the output keeps the resume data.
+                    self._resume_svg = out
+                    self.state = PAUSED
+                elif stopped:
                     self._resume_svg = out
                     self.pen_change = pen_change
                     self.state = PAUSED
