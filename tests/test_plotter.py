@@ -253,3 +253,53 @@ def test_pen_buttons_always_move_the_pen(fake_ebb):
     p.manual("lower_pen")
     p.manual("lower_pen")
     assert any(c.startswith("SP,0") for c in fake_ebb.instances[-1].commands)
+
+
+def motor_steps(commands):
+    """Total steps sent to motor 1 by SM moves."""
+    return sum(int(c.split(",")[2]) for c in commands if c.startswith("SM,"))
+
+
+def test_jog_tracks_offset_and_returns_to_start(fake_ebb, fast):
+    p = Plotter()
+    assert p.jog(10, 5) == [10, 5]
+    assert any(c.startswith("SM,") for c in fake_ebb.instances[-1].commands)
+    assert p.jog(-30, 0) == [0, 5]  # stops at the start corner instead of the end stop
+    p.back_to_start()
+    assert p.status()["jog"] == [0, 0]
+
+
+def test_plot_returns_to_start_after_jogging(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.jog(20, 0)
+    walks_before = len(fake_ebb.instances)
+    p.plot(prepared)
+    assert p.wait(60) and p.status()["paths_done"] == 4
+    assert "Returning to the start corner before plotting." in p.status()["messages"]
+    assert len(fake_ebb.instances) == walks_before + 2  # the walk back, then the plot
+
+
+def test_motors_off_makes_position_unknown(fake_ebb):
+    p = Plotter()
+    p.manual("disable_xy")
+    assert p.status()["jog"] is None
+    with pytest.raises(ValueError):
+        p.back_to_start()
+    p.set_start()
+    assert p.status()["jog"] == [0, 0]
+
+
+def test_steps_per_inch_sets_how_far_it_drives(fake_ebb, fast):
+    # High resolution: one inch along X is 2 x steps_per_inch steps on each motor.
+    p = Plotter()
+    p.jog(25.4, 0)
+    assert abs(motor_steps(fake_ebb.instances[-1].commands) - 2 * 1270) <= 2
+    p.update_settings({"steps_per_inch": 1016})
+    p.jog(25.4, 0)
+    assert abs(motor_steps(fake_ebb.instances[-1].commands) - 2 * 1016) <= 2
+
+
+def test_reach_override_reaches_the_driver():
+    ad = driver.Driver()
+    ad.configure(None, {**driver.DEFAULT_SETTINGS, "reach_x": 420, "reach_y": 290}, mode="manual", preview=True)
+    assert abs(ad.params.x_travel_V3A3 * 25.4 - 420) < 1e-6 and abs(ad.params.y_travel_default * 25.4 - 290) < 1e-6

@@ -336,3 +336,13 @@ dialog h2 { margin: 0; font-size: 26px; }
 .canvas svg .overlay { fill: rgb(57 168 201 / 0.06); stroke: var(--accent); stroke-width: 1.5px; stroke-dasharray: 8 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .canvas svg .overlay-label { fill: var(--accent); pointer-events: none; font-family: var(--body); }
 .canvas svg .guide.card { stroke: var(--text); stroke-dasharray: 3 3; opacity: 0.6; }
+
+/* ---------------------------------------------------------------- drive and calibrate */
+
+.drive-pos { font-variant-numeric: tabular-nums; font-weight: 500; margin: 4px 0 10px; }
+.jog { display: grid; grid-template-columns: repeat(3, 64px); gap: 6px; justify-content: start; align-items: center; }
+.jog button { padding: 8px 0; font-size: 16px; }
+.jog select { padding: 6px 2px; font-size: 12px; }
+h3.sub { font-size: 14px; font-weight: 600; margin: 16px 0 4px; font-family: var(--body); letter-spacing: 0; }
+.scale-row { display: flex; gap: 8px; align-items: flex-end; }
+.scale-row label { flex: 1; }

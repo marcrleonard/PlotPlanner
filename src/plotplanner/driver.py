@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 from typing import Callable
 
 _VENDOR = os.path.join(os.path.dirname(__file__), "_vendor")
@@ -34,10 +35,15 @@ SETTINGS = {
     "resolution": (int, 1, 2),  # 1 high (16x microstepping), 2 low/faster
     "model": (int, 1, 4),  # 1: 300x218 mm, 2: A3 (430x297 mm), 3: XLX, 4: MiniKit
     "port": (str, None, None),  # serial port; empty for the first plotter found
+    # Calibration overrides; 0 keeps the driver's value for the machine model.
+    "reach_x": (float, 0, 2000),  # mm the carriage can travel in X
+    "reach_y": (float, 0, 2000),  # mm in Y
+    "steps_per_inch": (float, 0, 10000),  # the driver's native_res_factor (iDraw 1270, AxiDraw 1016)
 }
 
 # Settings that can change while a plot runs; the rest change the geometry or the connection.
-LIVE_SETTINGS = frozenset(SETTINGS) - {"auto_rotate", "resolution", "model", "port"}
+LIVE_SETTINGS = frozenset(SETTINGS) - {"auto_rotate", "resolution", "model", "port", "reach_x", "reach_y", "steps_per_inch"}
+TRAVEL_PARAMS = ("default", "V3A3", "V3XLX", "MiniKit")  # the driver's x_travel_* / y_travel_* names
 
 DEFAULT_SETTINGS = {
     "speed_pendown": 25,
@@ -55,6 +61,9 @@ DEFAULT_SETTINGS = {
     # The old PlotPlanner driver allowed 17 x 12 in of travel, so this machine is A3-sized.
     "model": 2,
     "port": "",
+    "reach_x": 0.0,
+    "reach_y": 0.0,
+    "steps_per_inch": 0.0,
 }
 
 def machine_travel_mm() -> dict[int, list[float]]:
@@ -67,6 +76,10 @@ def machine_travel_mm() -> dict[int, list[float]]:
         4: (p.x_travel_MiniKit, p.y_travel_MiniKit),
     }
     return {model: [round(x * 25.4), round(y * 25.4)] for model, (x, y) in travel.items()}
+
+
+def default_steps_per_inch() -> float:
+    return float(axidraw.AxiDraw(default_logging=False).params.native_res_factor)
 
 
 def pen_heights_reversed() -> bool:
@@ -112,6 +125,9 @@ class Driver(axidraw.AxiDraw):
         message: Callable[[str], None] = print,
     ):
         super().__init__(default_logging=False, user_message_fun=self._relay)
+        # params is the shared axidraw_conf module; give each driver its own copy so per-plot
+        # overrides (reach, steps per inch) never leak into the next one.
+        self.params = types.SimpleNamespace(**{k: v for k, v in vars(self.params).items() if not k.startswith("__")})
         self.params.check_updates = False
         self._message = message
         self._on_path_start = on_path_start
@@ -135,6 +151,15 @@ class Driver(axidraw.AxiDraw):
     def configure(self, svg: str, settings: dict, mode: str = "plot", layer: int | None = None, preview: bool = False):
         self.plot_setup(svg)
         for key, value in clean_settings(settings).items():
+            if key in ("reach_x", "reach_y"):
+                if value > 0:  # every model, so the override holds whichever one is selected
+                    for name in TRAVEL_PARAMS:
+                        setattr(self.params, f"{key[-1]}_travel_{name}", value / 25.4)
+                continue
+            if key == "steps_per_inch":
+                if value > 0:
+                    self.params.native_res_factor = value
+                continue
             if key == "port":
                 value = value or None
             setattr(self.options, key, value)

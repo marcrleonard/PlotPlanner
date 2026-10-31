@@ -178,6 +178,35 @@
           <button data-manual="lower_pen">Pen down</button>
           <button data-manual="disable_xy">Motors off</button>
         </div>
+        <details id="drive">
+          <summary>Drive &amp; calibrate</summary>
+          <p id="drive-pos" class="drive-pos">At the start corner</p>
+          <div class="jog">
+            <span></span><button data-jog="0,-1" title="Up (towards home)">↑</button><span></span>
+            <button data-jog="-1,0" title="Left (towards home)">←</button>
+            <select id="jog-step" title="Step">
+              <option value="1">1 mm</option><option value="5">5 mm</option>
+              <option value="10" selected>10 mm</option><option value="50">50 mm</option>
+            </select>
+            <button data-jog="1,0" title="Right">→</button>
+            <span></span><button data-jog="0,1" title="Down">↓</button><span></span>
+          </div>
+          <div class="buttons small">
+            <button id="jog-back">Back to start</button>
+            <button id="jog-set">Set start here</button>
+            <button id="jog-reach" title="Save this position as the far corner the plotter can reach">Use as far corner</button>
+          </div>
+          <p class="hint">The pen stays as it is, so lower it to draw a test line. A plot always returns to the
+            start corner first.</p>
+          <h3 class="sub">Check scale</h3>
+          <p class="hint">Draws a 100 mm line along X from here. Measure it with a ruler and enter what you get.</p>
+          <div class="buttons small"><button id="scale-draw">Draw 100 mm line</button></div>
+          <div class="scale-row">
+            <label>Measured (mm) <input id="scale-measured" type="number" min="10" step="0.1"></label>
+            <button id="scale-apply">Apply</button>
+          </div>
+          <p id="scale-info" class="hint"></p>
+        </details>
         <details id="settings">
           <summary>Plotter settings</summary>
           <form id="settings-form" class="form">
@@ -201,6 +230,13 @@
                 <option value="4">MiniKit (160 × 101 mm)</option>
               </select>
             </label>
+            <div class="pair">
+              <label>Reach X (mm) <input name="reach_x" type="number" min="0" step="1" placeholder="model"></label>
+              <label>Reach Y (mm) <input name="reach_y" type="number" min="0" step="1" placeholder="model"></label>
+            </div>
+            <label>Steps per inch <input name="steps_per_inch" type="number" min="0" step="0.1" placeholder="driver default"></label>
+            <p class="hint">Blank keeps the machine size's reach and the driver's steps per inch. Set them from
+              Drive &amp; calibrate.</p>
             <label>Resolution
               <select name="resolution">
                 <option value="1">High (16× microstepping)</option>

@@ -96,6 +96,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             layer_sources=optimize.LAYER_SOURCES,
             machine_travel_mm=driver.machine_travel_mm(),
             pen_reversed=driver.pen_heights_reversed(),
+            default_steps_per_inch=driver.default_steps_per_inch(),
             optimize_defaults=optimize.OptimizeOptions().__dict__,
             settings=plotter.settings,
             setting_defaults=driver.DEFAULT_SETTINGS,
@@ -144,6 +145,17 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
     @app.post("/api/resume")
     def resume():
         plotter.resume()
+        return jsonify(plotter.status())
+
+    @app.post("/api/jog")
+    def jog():
+        data = body()
+        if data.get("action") == "back":
+            plotter.back_to_start()
+        elif data.get("action") == "set_start":
+            plotter.set_start()
+        else:
+            plotter.jog(float(data.get("dx", 0)), float(data.get("dy", 0)))
         return jsonify(plotter.status())
 
     @app.post("/api/home")
