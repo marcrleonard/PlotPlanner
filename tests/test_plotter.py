@@ -303,3 +303,11 @@ def test_reach_override_reaches_the_driver():
     ad = driver.Driver()
     ad.configure(None, {**driver.DEFAULT_SETTINGS, "reach_x": 420, "reach_y": 290}, mode="manual", preview=True)
     assert abs(ad.params.x_travel_V3A3 * 25.4 - 420) < 1e-6 and abs(ad.params.y_travel_default * 25.4 - 290) < 1e-6
+
+
+def test_default_reach_is_the_idraw_a3(fake_ebb):
+    # The driver's A3 model is the AxiDraw's 430 mm; iDraw A3s are listed at 420 mm.
+    assert Plotter().settings["reach_x"] == 420
+    ad = driver.Driver()
+    ad.configure(None, driver.DEFAULT_SETTINGS, mode="manual", preview=True)
+    assert abs(ad.params.x_travel_V3A3 * 25.4 - 420) < 1e-6

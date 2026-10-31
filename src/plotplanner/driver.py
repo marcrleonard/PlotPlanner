@@ -61,7 +61,9 @@ DEFAULT_SETTINGS = {
     # The old PlotPlanner driver allowed 17 x 12 in of travel, so this machine is A3-sized.
     "model": 2,
     "port": "",
-    "reach_x": 0.0,
+    # iDraw A3 machines are listed at 420 x 297 mm of travel; the driver's A3 model assumes the AxiDraw
+    # A3's 430. Start 10 mm short rather than drive into the end stop; measure with Drive & calibrate.
+    "reach_x": 420.0,
     "reach_y": 0.0,
     "steps_per_inch": 0.0,
 }
