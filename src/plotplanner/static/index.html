@@ -67,6 +67,9 @@
             </select>
           </label>
           <label class="check"><input name="fit" type="checkbox" checked> Scale to fill margins</label>
+          <label>Pen width (mm)
+            <input name="pen_width" type="number" min="0.05" max="3" step="0.05" value="0.35">
+          </label>
           <fieldset>
             <legend>Optimize</legend>
             <label class="check"><input name="merge" type="checkbox" checked> Merge touching lines</label>
@@ -169,6 +172,14 @@
     </aside>
 
     <section class="stage">
+      <div id="viewbar" class="viewbar" hidden>
+        <button data-zoom="out" title="Zoom out (−)">−</button>
+        <button data-zoom="fit" title="Fit to window (F)">Fit</button>
+        <button data-zoom="actual" title="Actual print size (1)">1:1</button>
+        <button data-zoom="in" title="Zoom in (+)">+</button>
+        <span id="zoom-label" class="zoom-label"></span>
+        <button id="calibrate-button" class="link" title="Make 1:1 match a ruler on this screen">Calibrate</button>
+      </div>
       <div id="canvas" class="canvas empty"><p>No drawing loaded</p></div>
     </section>
   </main>
@@ -182,6 +193,21 @@
       <div class="buttons">
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Connect</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="calibrate-dialog">
+    <form method="dialog" class="form">
+      <h2>Calibrate 1:1</h2>
+      <p class="hint">Hold a bank card (85.6 × 54 mm) against the screen and drag until the outline matches it.
+        Saved in this browser, for this screen.</p>
+      <div class="calibrate-card-wrap"><div id="calibrate-card" class="calibrate-card"></div></div>
+      <input id="calibrate-range" type="range" min="2" max="9" step="0.01">
+      <div class="buttons">
+        <button value="reset" formnovalidate>Default</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
       </div>
     </form>
   </dialog>

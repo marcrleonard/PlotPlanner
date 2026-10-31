@@ -88,26 +88,178 @@ function render(svgText, { tracking = false } = {}) {
     const h = parseFloat(svg.getAttribute("height")) || 1000;
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   }
+  const scroll = [canvas.scrollLeft, canvas.scrollTop];
   canvas.replaceChildren(document.importNode(svg, true));
   canvas.classList.remove("empty");
   canvas.classList.toggle("tracking", tracking);
+  canvas.classList.toggle("pen", !tracking); // Prepare/Load show true pen width; Plot shows progress
   state.currentEl = null;
-  fitDrawing();
+  $("#viewbar").hidden = false;
+  view.apply();
+  [canvas.scrollLeft, canvas.scrollTop] = scroll; // keep your place when the layout preview refreshes
   return svg;
 }
 
-function fitDrawing() {
-  const svg = $("svg", canvas);
-  if (!svg) return;
-  const [, , vw, vh] = svg.getAttribute("viewBox").split(/[\s,]+/).map(Number);
-  const box = canvas.getBoundingClientRect();
-  const maxH = Math.min(box.height || Infinity, window.innerHeight - 120);
-  const scale = Math.min(box.width / vw, maxH / vh);
-  svg.setAttribute("width", Math.max(1, Math.floor(vw * scale)));
-  svg.setAttribute("height", Math.max(1, Math.floor(vh * scale)));
+// ------------------------------------------------------------------ viewer
+
+// Length attribute -> millimetres. Unitless and px are CSS pixels (96 per inch).
+const MM_PER = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, q: 0.25, px: 25.4 / 96, "": 25.4 / 96 };
+function lengthMm(value) {
+  const m = /^\s*([\d.]+)\s*([a-z]*)\s*$/i.exec(value || "");
+  return m && m[2].toLowerCase() in MM_PER ? Number(m[1]) * MM_PER[m[2].toLowerCase()] : null;
 }
 
-new ResizeObserver(fitDrawing).observe(canvas);
+const DEFAULT_PX_PER_MM = 96 / 25.4; // what browsers assume; real screens differ, hence calibration
+
+const view = {
+  mode: "fit", // "fit" follows the window; "zoom" holds `scale`
+  scale: 1, // screen px per mm of paper
+  pxPerMm: Number(store.get("pp.pxPerMm", DEFAULT_PX_PER_MM)) || DEFAULT_PX_PER_MM, // 1:1 on this screen
+
+  // Paper size in mm, read once from the file's own width/height (apply() overwrites those
+  // attributes with screen pixels).
+  page(svg) {
+    if (!svg.dataset.mmW) {
+      const [, , vw, vh] = svg.getAttribute("viewBox").split(/[\s,]+/).map(Number);
+      svg.dataset.mmW = lengthMm(svg.getAttribute("width")) ?? vw * MM_PER.px;
+      svg.dataset.mmH = lengthMm(svg.getAttribute("height")) ?? vh * MM_PER.px;
+      svg.dataset.unitsPerMm = vw / svg.dataset.mmW;
+    }
+    return { w: Number(svg.dataset.mmW), h: Number(svg.dataset.mmH), unitsPerMm: Number(svg.dataset.unitsPerMm) };
+  },
+
+  fitScale(page) {
+    const box = canvas.getBoundingClientRect();
+    return Math.max(0.05, Math.min((box.width - 48) / page.w, (box.height - 48) / page.h));
+  },
+
+  apply() {
+    const svg = $("svg", canvas);
+    if (!svg) return;
+    const page = this.page(svg);
+    if (this.mode === "fit") this.scale = this.fitScale(page);
+    svg.setAttribute("width", Math.max(1, Math.round(page.w * this.scale)));
+    svg.setAttribute("height", Math.max(1, Math.round(page.h * this.scale)));
+    svg.style.setProperty("--pen", String(penWidth() * page.unitsPerMm));
+    $("#zoom-label").textContent = `${Math.round((100 * this.scale) / this.pxPerMm)}%`;
+    $$("[data-zoom]").forEach((b) => b.classList.toggle("active",
+      (b.dataset.zoom === "fit" && this.mode === "fit") ||
+      (b.dataset.zoom === "actual" && this.mode === "zoom" && Math.abs(this.scale - this.pxPerMm) < 1e-6)));
+  },
+
+  // Zoom to `scale`, keeping the paper point under (clientX, clientY) where it is.
+  zoomTo(scale, clientX, clientY) {
+    const svg = $("svg", canvas);
+    if (!svg) return;
+    const box = canvas.getBoundingClientRect();
+    clientX ??= box.left + box.width / 2;
+    clientY ??= box.top + box.height / 2;
+    const before = svg.getBoundingClientRect();
+    const fx = (clientX - before.left) / before.width;
+    const fy = (clientY - before.top) / before.height;
+    this.mode = "zoom";
+    this.scale = Math.min(Math.max(scale, this.pxPerMm * 0.05), this.pxPerMm * 16);
+    this.apply();
+    const after = svg.getBoundingClientRect();
+    canvas.scrollLeft += after.left + fx * after.width - clientX;
+    canvas.scrollTop += after.top + fy * after.height - clientY;
+  },
+
+  fit() {
+    this.mode = "fit";
+    this.apply();
+  },
+};
+
+new ResizeObserver(() => view.mode === "fit" && view.apply()).observe(canvas);
+
+$$("[data-zoom]").forEach((button) => button.addEventListener("click", () => {
+  const z = button.dataset.zoom;
+  if (z === "fit") view.fit();
+  else if (z === "actual") view.zoomTo(view.pxPerMm);
+  else view.zoomTo(view.scale * (z === "in" ? 1.25 : 0.8));
+}));
+
+// Pinch (reported as ctrl+wheel) or Cmd/Ctrl+scroll zooms around the pointer; plain scroll pans.
+canvas.addEventListener("wheel", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || !$("svg", canvas)) return;
+  e.preventDefault();
+  view.zoomTo(view.scale * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+}, { passive: false });
+
+// Click and drag to pan.
+let drag = null;
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !$("svg", canvas)) return;
+  drag = { x: e.clientX, y: e.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
+  canvas.setPointerCapture(e.pointerId);
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  canvas.scrollLeft = drag.left - (e.clientX - drag.x);
+  canvas.scrollTop = drag.top - (e.clientY - drag.y);
+});
+for (const type of ["pointerup", "pointercancel"]) {
+  canvas.addEventListener(type, () => {
+    drag = null;
+    canvas.classList.remove("dragging");
+  });
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, select, textarea, dialog") || e.metaKey || e.ctrlKey || !$("svg", canvas)) return;
+  if (e.key === "f" || e.key === "0") view.fit();
+  else if (e.key === "1") view.zoomTo(view.pxPerMm);
+  else if (e.key === "+" || e.key === "=") view.zoomTo(view.scale * 1.25);
+  else if (e.key === "-") view.zoomTo(view.scale * 0.8);
+  else return;
+  e.preventDefault();
+});
+
+// Calibration: size a bank card outline to match a real one; that gives this screen's px per mm.
+const CARD_MM = [85.6, 53.98];
+const calibrateDialog = $("#calibrate-dialog");
+const calibrateRange = $("#calibrate-range");
+
+function drawCalibrationCard() {
+  const v = Number(calibrateRange.value);
+  Object.assign($("#calibrate-card").style, {
+    width: `${CARD_MM[0] * v}px`,
+    height: `${CARD_MM[1] * v}px`,
+    borderRadius: `${3.18 * v}px`,
+  });
+}
+
+calibrateRange.addEventListener("input", drawCalibrationCard);
+$("#calibrate-button").addEventListener("click", () => {
+  calibrateRange.value = view.pxPerMm;
+  drawCalibrationCard();
+  calibrateDialog.showModal();
+});
+calibrateDialog.addEventListener("close", () => {
+  const value = calibrateDialog.returnValue;
+  if (value !== "save" && value !== "reset") return;
+  const old = view.pxPerMm;
+  view.pxPerMm = value === "reset" ? DEFAULT_PX_PER_MM : Number(calibrateRange.value);
+  store.set("pp.pxPerMm", view.pxPerMm);
+  if (view.mode === "zoom") view.scale *= view.pxPerMm / old; // stay at the same percentage
+  view.apply();
+});
+
+// Pen width (mm): drawn at that width in the preview, and the "auto" merge gap.
+function penWidth() {
+  return Math.min(Math.max(Number($("#optimize-form").pen_width.value) || 0.35, 0.05), 3);
+}
+
+{
+  const input = $("#optimize-form").pen_width;
+  input.value = store.get("pp.penWidth", input.value);
+  input.addEventListener("input", () => {
+    store.set("pp.penWidth", input.value);
+    view.apply();
+  });
+}
 
 function describe(svgText) {
   const svg = new DOMParser().parseFromString(svgText, "image/svg+xml").documentElement;
@@ -233,16 +385,23 @@ function optimizeOptions() {
 // Advanced optimize sliders: start at the server's defaults ("auto"), tweakable, Auto resets them.
 const ADVANCED = ["merge_tolerance", "simplify_tolerance", "min_length"];
 
+// "Auto" for the merge gap is the pen width: gaps narrower than the line don't show.
+function autoValue(name) {
+  return name === "merge_tolerance" ? Math.round(penWidth() * 100) / 100 : Number(state.info?.optimize_defaults[name]);
+}
+
 function showAdvancedValue(input) {
-  const auto = Number(input.value) === Number(state.info?.optimize_defaults[input.name]);
+  const auto = Math.abs(Number(input.value) - autoValue(input.name)) < 0.026;
+  input.dataset.auto = auto ? "1" : "";
   const value = Number(input.value) === 0 ? "off" : `${Number(input.value)} mm`;
-  input.parentElement.querySelector("output").textContent = auto ? `${value} (auto)` : value;
+  const note = input.name === "merge_tolerance" ? " (auto: pen width)" : " (auto)";
+  input.parentElement.querySelector("output").textContent = auto ? `${value}${note}` : value;
 }
 
 function resetAdvanced() {
   const f = $("#optimize-form");
   for (const name of ADVANCED) {
-    f[name].value = state.info.optimize_defaults[name];
+    f[name].value = autoValue(name);
     showAdvancedValue(f[name]);
   }
 }
@@ -252,6 +411,18 @@ for (const name of ADVANCED) {
   input.addEventListener("input", () => showAdvancedValue(input));
   // Once optimized, re-run on release so the line count follows the slider.
   input.addEventListener("change", () => state.optimized && $("#optimize-form").requestSubmit());
+}
+
+{
+  // A new pen width moves an "auto" merge gap along with it.
+  const f = $("#optimize-form");
+  f.pen_width.addEventListener("input", () => {
+    if (f.merge_tolerance.dataset.auto) f.merge_tolerance.value = autoValue("merge_tolerance");
+    showAdvancedValue(f.merge_tolerance);
+  });
+  f.pen_width.addEventListener("change", () => {
+    if (state.optimized && f.merge_tolerance.dataset.auto) f.requestSubmit();
+  });
 }
 
 $("#advanced-auto").addEventListener("click", () => {

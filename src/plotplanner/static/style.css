@@ -113,26 +113,60 @@ button, input, select { font: inherit; color: inherit; }
 
 .panel h2 { font-size: 26px; margin: 4px 0 12px; }
 
-.stage { padding: 24px; overflow: auto; display: flex; }
+.stage { position: relative; display: flex; min-width: 0; min-height: 0; }
 
+/* The preview is a scrolling viewport; the sheet is sized in real millimetres times the zoom. */
 .canvas {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: auto;
   min-height: 300px;
+  padding: 24px;
+  cursor: grab;
 }
+.canvas.dragging { cursor: grabbing; user-select: none; }
+.canvas > p { margin: auto; }
 
-.canvas.empty { border: 2px dashed var(--line); border-radius: var(--radius); color: var(--muted); }
+.canvas.empty { margin: 24px; padding: 0; border: 2px dashed var(--line); border-radius: var(--radius); color: var(--muted); cursor: default; }
 
 .canvas svg {
-  max-width: 100%;
-  max-height: calc(100vh - 120px);
-  width: auto;
-  height: auto;
+  flex: none;
+  margin: auto; /* centres when smaller than the viewport, scrolls cleanly when larger */
   background: var(--paper);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 8px 24px rgb(0 0 0 / 0.08);
 }
+
+/* True pen width: --pen is the pen width in the drawing's own units, set per render. */
+.canvas.pen svg :is(path, line, polyline, polygon, rect, circle, ellipse):not(.guide) {
+  stroke-width: var(--pen);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: none;
+}
+
+.viewbar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+.viewbar button { padding: 4px 10px; min-width: 34px; }
+.viewbar button.active { border-color: var(--accent); color: var(--accent); }
+.viewbar button.link { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 4px 6px; }
+.zoom-label { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+
+.calibrate-card-wrap { overflow: auto; padding: 8px 0; }
+.calibrate-card { border: 2px solid var(--accent); border-radius: 3.2mm; background: rgb(57 168 201 / 0.08); }
+#calibrate-dialog { width: min(640px, 94vw); }
+#calibrate-range { width: 100%; }
 
 /* Plot preview colouring; ids come from the server (pp_1, pp_2, ...). */
 .canvas.tracking svg [id^="pp_"] { stroke: var(--pending); stroke-width: 1px; vector-effect: non-scaling-stroke; fill: none; }
@@ -251,8 +285,8 @@ dialog h2 { margin: 0; font-size: 26px; }
   .server { margin-left: 0; max-width: 100%; }
   .layout { grid-template-columns: 1fr; height: auto; }
   .panel { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
-  .stage { padding: 16px; order: -1; }
-  .canvas svg { max-height: 60vh; }
+  .stage { order: -1; height: 60vh; }
+  .canvas { padding: 12px; }
 }
 
 /* ---------------------------------------------------------------- layout preview */
