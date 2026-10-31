@@ -168,7 +168,11 @@ class Plotter:
             return self.offset
 
     def back_to_start(self) -> None:
+        """Back to the start corner, pen up. While paused this is Home: Resume still continues."""
         with self._lock:
+            if self.state == PAUSED:
+                self.home()
+                return
             if self.state != IDLE:
                 raise PlotterBusy(f"cannot drive while {self.state}")
             if self.offset is None:

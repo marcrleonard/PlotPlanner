@@ -311,3 +311,17 @@ def test_default_reach_is_the_idraw_a3(fake_ebb):
     ad = driver.Driver()
     ad.configure(None, driver.DEFAULT_SETTINGS, mode="manual", preview=True)
     assert abs(ad.params.x_travel_V3A3 * 25.4 - 420) < 1e-6
+
+
+def test_back_to_start_while_paused_goes_home_and_keeps_the_plot(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared)
+    wait_for(lambda: p.status()["paths_done"] >= 1)
+    p.pause()
+    p.wait(20)
+    p.back_to_start()
+    assert p.wait(30) and p.status()["state"] == PAUSED
+    with pytest.raises(PlotterBusy):
+        p.jog(10, 0)  # jogging would lose resume's place
+    p.resume()
+    assert p.wait(60) and p.status()["paths_done"] == 4
