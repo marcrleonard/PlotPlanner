@@ -137,7 +137,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 /* True pen width: --pen is the pen width in the drawing's own units, set per render. */
-.canvas.pen svg :is(path, line, polyline, polygon, rect, circle, ellipse):not(.guide) {
+.canvas.pen svg :is(path, line, polyline, polygon, rect, circle, ellipse):not(.guide, .overlay) {
   stroke-width: var(--pen);
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -316,3 +316,20 @@ dialog h2 { margin: 0; font-size: 26px; }
 .modes input { position: absolute; opacity: 0; pointer-events: none; }
 .modes label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
 .modes label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+/* ---------------------------------------------------------------- rulers and overlay */
+
+:root { --ruler: 20px; }
+.stage.rulers .canvas { margin: var(--ruler) 0 0 var(--ruler); }
+.ruler { position: absolute; z-index: 1; background: var(--surface); }
+.ruler-x { top: 0; left: var(--ruler); right: 0; height: var(--ruler); width: calc(100% - var(--ruler)); border-bottom: 1px solid var(--line); }
+.ruler-y { top: var(--ruler); left: 0; bottom: 0; width: var(--ruler); height: calc(100% - var(--ruler)); border-right: 1px solid var(--line); }
+.ruler-corner {
+  position: absolute; z-index: 2; top: 0; left: 0; width: var(--ruler); height: var(--ruler);
+  padding: 0; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  border-radius: 0; background: var(--surface); color: var(--muted); font-size: 9px;
+}
+.viewbar { top: calc(var(--ruler) + 10px); }
+.viewbar select { padding: 4px 6px; font-size: 13px; }
+.canvas svg .overlay { fill: rgb(57 168 201 / 0.06); stroke: var(--accent); stroke-width: 1.5px; stroke-dasharray: 8 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.canvas svg .overlay-label { fill: var(--accent); pointer-events: none; font-family: var(--body); }

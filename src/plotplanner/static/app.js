@@ -95,6 +95,8 @@ function render(svgText, { tracking = false } = {}) {
   canvas.classList.toggle("pen", !tracking); // Prepare/Load show true pen width; Plot shows progress
   state.currentEl = null;
   $("#viewbar").hidden = false;
+  for (const id of ["#ruler-x", "#ruler-y", "#ruler-unit"]) $(id).hidden = false;
+  $(".stage").classList.add("rulers");
   view.apply();
   [canvas.scrollLeft, canvas.scrollTop] = scroll; // keep your place when the layout preview refreshes
   return svg;
@@ -142,6 +144,8 @@ const view = {
     svg.setAttribute("height", Math.max(1, Math.round(page.h * this.scale)));
     svg.style.setProperty("--pen", String(penWidth() * page.unitsPerMm));
     $("#zoom-label").textContent = `${Math.round((100 * this.scale) / this.pxPerMm)}%`;
+    drawOverlay(svg, page);
+    requestAnimationFrame(drawRulers);
     $$("[data-zoom]").forEach((b) => b.classList.toggle("active",
       (b.dataset.zoom === "fit" && this.mode === "fit") ||
       (b.dataset.zoom === "actual" && this.mode === "zoom" && Math.abs(this.scale - this.pxPerMm) < 1e-6)));
@@ -216,6 +220,110 @@ window.addEventListener("keydown", (e) => {
   else return;
   e.preventDefault();
 });
+
+// Rulers, like an image editor's: zero is the sheet's top-left corner, which is where the pen
+// starts. They follow zoom and scroll; the drawing's extent is shaded once its layout is known.
+const RULER_STEPS = {
+  mm: { perMm: 1, steps: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500] },
+  in: { perMm: 1 / 25.4, steps: [1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 5, 10, 20] },
+};
+let rulerUnit = store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
+$("#ruler-unit").textContent = rulerUnit;
+$("#ruler-unit").addEventListener("click", () => {
+  rulerUnit = rulerUnit === "mm" ? "in" : "mm";
+  store.set("pp.rulerUnit", rulerUnit);
+  $("#ruler-unit").textContent = rulerUnit;
+  drawRulers();
+});
+
+function fmtRuler(value) {
+  if (rulerUnit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+  return String(Math.round(value * 1000) / 1000).replace(/^0\./, ".");
+}
+
+function drawRuler(el, horizontal, originPx, extent) {
+  const dpr = window.devicePixelRatio || 1;
+  const { width, height } = el.getBoundingClientRect();
+  el.width = Math.round(width * dpr);
+  el.height = Math.round(height * dpr);
+  const ctx = el.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const length = horizontal ? width : height;
+  const thick = horizontal ? height : width;
+  const { perMm, steps } = RULER_STEPS[rulerUnit];
+  const pxPerUnit = view.scale / perMm;
+  const label = steps.find((s) => s * pxPerUnit >= 48) ?? steps.at(-1);
+  const minor = steps.find((s) => s * pxPerUnit >= 6 && s <= label) ?? label;
+
+  if (extent) { // the drawing, shaded
+    ctx.fillStyle = "rgb(57 168 201 / 0.18)";
+    const a = originPx + extent[0] * view.scale;
+    const b = a + extent[1] * view.scale;
+    horizontal ? ctx.fillRect(a, 0, b - a, thick) : ctx.fillRect(0, a, thick, b - a);
+  }
+  ctx.strokeStyle = css.getPropertyValue("--muted").trim();
+  ctx.fillStyle = css.getPropertyValue("--muted").trim();
+  ctx.font = "9px system-ui, sans-serif";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const first = Math.floor(-originPx / pxPerUnit / minor) * minor;
+  for (let v = first; v * pxPerUnit + originPx <= length; v += minor) {
+    const p = Math.round(originPx + v * pxPerUnit) + 0.5;
+    const isLabel = Math.abs(v / label - Math.round(v / label)) < 1e-6;
+    const isHalf = Math.abs((2 * v) / label - Math.round((2 * v) / label)) < 1e-6;
+    const tick = isLabel ? thick : isHalf ? thick * 0.5 : thick * 0.28;
+    if (horizontal) { ctx.moveTo(p, thick); ctx.lineTo(p, thick - tick); }
+    else { ctx.moveTo(thick, p); ctx.lineTo(thick - tick, p); }
+    if (isLabel) {
+      const text = fmtRuler(v);
+      if (horizontal) ctx.fillText(text, p + 3, 9);
+      else { ctx.save(); ctx.translate(9, p + 3); ctx.rotate(Math.PI / 2); ctx.fillText(text, 0, 0); ctx.restore(); }
+    }
+  }
+  ctx.stroke();
+}
+
+function drawRulers() {
+  const svg = $("svg", canvas);
+  if (!svg || $("#ruler-x").hidden) return;
+  const r = svg.getBoundingClientRect();
+  const x = $("#ruler-x").getBoundingClientRect();
+  const y = $("#ruler-y").getBoundingClientRect();
+  const b = state.step === "prepare" ? state.layout?.bounds_mm : null;
+  drawRuler($("#ruler-x"), true, r.left - x.left, b && [b[0], b[2]]);
+  drawRuler($("#ruler-y"), false, r.top - y.top, b && [b[1], b[3]]);
+}
+
+canvas.addEventListener("scroll", () => requestAnimationFrame(drawRulers));
+window.addEventListener("resize", () => requestAnimationFrame(drawRulers));
+
+// Size overlay: a dashed outline of a common size from the sheet's corner.
+const overlaySelect = $("#overlay");
+overlaySelect.value = store.get("pp.overlay", "");
+overlaySelect.addEventListener("change", () => {
+  store.set("pp.overlay", overlaySelect.value);
+  view.apply();
+});
+
+function drawOverlay(svg, page) {
+  svg.querySelectorAll(".overlay, .overlay-label").forEach((el) => el.remove());
+  if (!overlaySelect.value) return;
+  const [w, h] = overlaySelect.value.split("x").map(Number);
+  const u = page.unitsPerMm;
+  const NS = "http://www.w3.org/2000/svg";
+  const rect = document.createElementNS(NS, "rect");
+  for (const [k, v] of Object.entries({ x: 0, y: 0, width: w * u, height: h * u })) rect.setAttribute(k, v);
+  rect.setAttribute("class", "overlay");
+  const text = document.createElementNS(NS, "text");
+  text.setAttribute("class", "overlay-label");
+  text.setAttribute("x", (w - 2) * u);
+  text.setAttribute("y", (h - 2) * u);
+  text.setAttribute("text-anchor", "end");
+  text.setAttribute("font-size", 3.5 * u);
+  text.textContent = overlaySelect.selectedOptions[0].textContent;
+  svg.append(rect, text);
+}
 
 // Calibration: size a bank card outline to match a real one; that gives this screen's px per mm.
 const CARD_MM = [85.6, 53.98];
@@ -516,6 +624,7 @@ function showLayout() {
     svg.append(rect);
   }
   layoutInfo();
+  drawRulers();
 }
 
 function fmtMm([w, h]) {

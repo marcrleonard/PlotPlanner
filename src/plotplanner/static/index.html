@@ -216,8 +216,22 @@
         <button data-zoom="actual" title="Actual print size (1)">1:1</button>
         <button data-zoom="in" title="Zoom in (+)">+</button>
         <span id="zoom-label" class="zoom-label"></span>
+        <select id="overlay" title="Outline a common size from the corner">
+          <option value="">No overlay</option>
+          <option value="152.4x101.6">6 × 4 in</option>
+          <option value="101.6x152.4">4 × 6 in</option>
+          <option value="177.8x127">7 × 5 in</option>
+          <option value="127x177.8">5 × 7 in</option>
+          <option value="148x105">A6 (148 × 105)</option>
+          <option value="210x148">A5 (210 × 148)</option>
+          <option value="297x210">A4 (297 × 210)</option>
+          <option value="279.4x215.9">Letter (11 × 8.5 in)</option>
+        </select>
         <button id="calibrate-button" class="link" title="Make 1:1 match a ruler on this screen">Calibrate</button>
       </div>
+      <button id="ruler-unit" class="ruler-corner" title="Ruler units" hidden>mm</button>
+      <canvas id="ruler-x" class="ruler ruler-x" hidden></canvas>
+      <canvas id="ruler-y" class="ruler ruler-y" hidden></canvas>
       <div id="canvas" class="canvas empty"><p>No drawing loaded</p></div>
     </section>
   </main>
