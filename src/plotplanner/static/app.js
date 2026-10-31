@@ -861,7 +861,12 @@ $$("[data-jog]").forEach((button) => button.addEventListener("click", () => {
   const step = Number($("#jog-step").value);
   drive({ dx: sx * step, dy: sy * step }, button);
 }));
-$("#jog-back").addEventListener("click", (e) => drive({ action: "back" }, e.currentTarget));
+$("#jog-back").addEventListener("click", (e) =>
+  guarded(async () => {
+    await api("/jog", { method: "POST", body: { action: "back" } });
+    poll(); // while paused this goes home in the background; follow it
+  }, e.currentTarget),
+);
 $("#jog-set").addEventListener("click", (e) => drive({ action: "set_start" }, e.currentTarget));
 
 $("#jog-reach").addEventListener("click", (e) => {
@@ -1061,6 +1066,9 @@ function updateControls() {
   const canDrive = state.online && s === "idle";
   $$("#drive button, #jog-step, #scale-measured").forEach((el) => (el.disabled = !canDrive));
   if (canDrive && !state.status?.jog) $("#jog-back").disabled = true;
+  // Paused: Back to start is Home (resume data kept); jogging would lose the resume position.
+  if (state.online && s === "paused") $("#jog-back").disabled = false;
+  $("#drive-paused").hidden = s !== "paused";
   $("#layer").disabled = busy || state.layers.length < 2;
   $("#pen-changes").disabled = busy || state.layers.length < 2 || Boolean($("#layer").value);
   for (const b of $$("[data-manual]")) {
