@@ -319,6 +319,11 @@ function loadText(text, name) {
   // (pixel) files have no size to keep, so they default to the paper presets.
   const paper = $("#paper");
   paper.value = d.physical ? "source" : state.info?.optimize_defaults.paper ?? "a3";
+  // A file with a real size plots at that size; a unitless one has no size to keep, so it is
+  // scaled to the margins instead.
+  $("#optimize-form").fit.checked = !d.physical;
+  if (!d.physical) $("#optimize-form").size_mode.value = "width";
+  showMode();
   $("#custom-size").hidden = true;
   $("#layout-info").hidden = $("#layout-warnings").hidden = true; // the new file's layout is on its way
   kv($("#doc-info"), [
@@ -363,14 +368,45 @@ function paperValue() {
   return f.paper.value;
 }
 
-function optimizeOptions() {
+function prepareMode() {
+  return $("#optimize-form").mode.value;
+}
+
+// The machine's reach for the Machine size setting; Quick plot uses it as the sheet, so nothing is
+// rotated or clipped beyond what the plotter can draw.
+function machineReach() {
+  const settings = state.status?.settings ?? state.info?.settings ?? {};
+  return state.info?.machine_travel_mm?.[settings.model] ?? [430, 297];
+}
+
+function placementOptions() {
   const f = $("#optimize-form");
+  if (prepareMode() === "quick") {
+    const [w, h] = machineReach();
+    return {
+      paper: `${w}x${h}mm`,
+      orientation: "landscape",
+      margin: Number(f.quick_offset.value) || 0,
+      fit: false,
+      position: "top-left",
+      width: f.size_mode.value === "width" ? Number(f.quick_width.value) || null : null,
+    };
+  }
   return {
     paper: paperValue(),
     orientation: f.orientation.value,
-    layers_from: f.layers_from.value,
     margin: Number(f.margin.value) || 0,
     fit: f.fit.checked,
+    position: f.position.value,
+    width: null,
+  };
+}
+
+function optimizeOptions() {
+  const f = $("#optimize-form");
+  return {
+    ...placementOptions(),
+    layers_from: f.layers_from.value,
     merge: f.merge.checked,
     sort: f.sort.checked,
     two_opt: f.two_opt.checked,
@@ -441,7 +477,28 @@ function applyPrepared(result, optimized) {
 // Layout preview: the sheet at the chosen size with the drawing placed on it, exactly as it will
 // plot. Changing a layout field re-runs only vpype's layout (quick); Optimize adds the sorting.
 const PX_PER_MM = 96 / 25.4;
-const LAYOUT_FIELDS = ["paper", "paper_w", "paper_h", "orientation", "margin", "fit", "layers_from"];
+const LAYOUT_FIELDS = ["mode", "size_mode", "quick_width", "quick_offset",
+  "paper", "paper_w", "paper_h", "orientation", "margin", "fit", "position", "layers_from"];
+
+function showMode() {
+  const f = $("#optimize-form");
+  $$("[data-mode]", f).forEach((el) => (el.hidden = el.dataset.mode !== prepareMode()));
+  $("[data-size=width]", f).hidden = f.size_mode.value !== "width";
+}
+
+{
+  const f = $("#optimize-form");
+  const saved = store.get("pp.mode", "quick");
+  for (const radio of f.mode) radio.checked = radio.value === saved;
+  showMode();
+  f.addEventListener("change", (e) => {
+    if (e.target.name === "mode") store.set("pp.mode", prepareMode());
+    if (e.target.name === "size_mode" && f.size_mode.value === "width" && state.layout?.bounds_mm) {
+      f.quick_width.value = Math.round(state.layout.bounds_mm[2]); // start from the current width
+    }
+    if (e.target.name === "mode" || e.target.name === "size_mode") showMode();
+  });
+}
 
 function showLayout() {
   render(state.current);
@@ -449,7 +506,8 @@ function showLayout() {
   const svg = $("svg", canvas);
   if (!result?.page_mm || !svg) return;
   const opts = result.options;
-  if (opts.paper && opts.fit && opts.margin > 0) {
+  // Margin guide wherever the margin matters: scaling to fit, or anchoring to an edge.
+  if (prepareMode() === "layout" && opts.margin > 0 && (opts.fit || !["keep", "center"].includes(opts.position))) {
     const [w, h] = result.page_mm;
     const m = opts.margin;
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -472,7 +530,8 @@ function layoutInfo() {
   }
   const [pw, ph] = result.page_mm;
   const orientation = pw > ph ? "landscape" : pw < ph ? "portrait" : "square";
-  const paperName = result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
+  const paperName = prepareMode() === "quick" ? "Plotter reach"
+    : result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
   const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
   if (result.bounds_mm) rows.push(["Drawing", fmtMm(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
@@ -522,6 +581,13 @@ function previewLayout() {
       updateControls();
     }
   }, 300);
+}
+
+{
+  const position = $("#optimize-form").position;
+  position.value = store.get("pp.position", "keep");
+  if (!position.value) position.value = "keep";
+  position.addEventListener("change", () => store.set("pp.position", position.value));
 }
 
 $("#optimize-form").addEventListener("input", (e) => {
@@ -694,6 +760,7 @@ settingsForm.addEventListener("change", (e) => {
       fillSettings(settings);
       if (state.status) state.status.settings = settings;
       layoutInfo(); // the reach warning depends on machine size and auto-rotate
+      if (input.name === "model" && prepareMode() === "quick") previewLayout(); // the sheet is the reach
       const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
       if (state.status?.state === "plotting") toast(`Applied: ${label}`);
     } catch (err) {

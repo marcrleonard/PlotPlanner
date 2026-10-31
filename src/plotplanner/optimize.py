@@ -16,6 +16,9 @@ NSMAP = {"svg": SVG_NS, "inkscape": INKSCAPE_NS}
 PATH_ID_PREFIX = "pp_"
 PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid"]
 ORIENTATIONS = ["auto", "source", "portrait", "landscape"]
+# Where the drawing sits on the sheet. "keep" leaves it where it is relative to the page's top-left
+# corner; the rest anchor it that far in from the edges by the margin.
+POSITIONS = ["keep", "center", "top-left", "top", "top-right", "left", "right", "bottom-left", "bottom", "bottom-right"]
 LAYER_SOURCES = ["groups", "color"]  # what becomes a layer (a pen): top-level groups, or stroke colours
 UNGROUPED = "ungrouped"
 PEN_CHANGE_PREFIX = "!"  # the driver pauses at a layer whose name starts with "!"
@@ -32,7 +35,9 @@ class OptimizeOptions:
     paper: str | None = "a3"  # one of PAPER_SIZES, "WxH" in mm, or None to keep the source page
     orientation: str = "auto"  # auto: follow the drawing; source: follow the input page
     margin: float = 15.0
-    fit: bool = True  # scale to fill the margins; otherwise only centre
+    fit: bool = True  # scale to fill the margins
+    position: str = "keep"  # one of POSITIONS
+    width: float | None = None  # scale the drawing to this width in mm, keeping proportions
     merge: bool = True
     merge_tolerance: float = 0.35  # join line ends closer than this; about a pen's line width
     sort: bool = True
@@ -52,6 +57,8 @@ class OptimizeOptions:
             opts.paper = None
         if opts.orientation not in ORIENTATIONS:
             raise ValueError(f"orientation must be one of {ORIENTATIONS}")
+        if opts.position not in POSITIONS:
+            raise ValueError(f"position must be one of {POSITIONS}")
         if opts.layers_from not in LAYER_SOURCES:
             raise ValueError(f"layers_from must be one of {LAYER_SOURCES}")
         return opts
@@ -97,8 +104,25 @@ def _layout(opts: OptimizeOptions, doc: vp.Document) -> str:
     if landscape:
         args = f"--landscape {args}"
     if opts.fit:
-        args = f"--fit-to-margins {opts.margin}mm {args}"
-    return f"layout {args}"
+        return f"layout --fit-to-margins {opts.margin}mm {args}"
+    # Not scaling: only set the sheet; _place() moves the drawing if a position is chosen.
+    return f"pagesize {args}"
+
+
+def _place(opts: OptimizeOptions, doc: vp.Document) -> None:
+    """Move the drawing to opts.position, opts.margin in from the edges it is anchored to."""
+    bounds = doc.bounds()
+    if opts.position == "keep" or not bounds or not doc.page_size:
+        return
+    pw, ph = doc.page_size
+    m = opts.margin * PX_PER_MM
+    x0, y0, x1, y1 = bounds
+    w, h = x1 - x0, y1 - y0
+    horizontal = "left" if "left" in opts.position else "right" if "right" in opts.position else "center"
+    vertical = "top" if "top" in opts.position else "bottom" if "bottom" in opts.position else "center"
+    x = {"left": m, "right": pw - m - w, "center": (pw - w) / 2}[horizontal]
+    y = {"top": m, "bottom": ph - m - h, "center": (ph - h) / 2}[vertical]
+    doc.translate(x - x0, y - y0)
 
 
 def _pipeline(opts: OptimizeOptions) -> str:
@@ -218,11 +242,17 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
     doc, source_names = _read(svg, opts)
     if doc.is_empty():
         raise ValueError("no drawable paths found in SVG")
+    if opts.width:
+        x0, _, x1, _ = doc.bounds()
+        if x1 > x0:
+            factor = opts.width * PX_PER_MM / (x1 - x0)
+            doc.scale(factor, factor)
 
     # Lay out first so the stats compare like with like and tolerances are in final millimetres.
     layout = _layout(opts, doc)
     if layout:
         doc = vpype_cli.execute(layout, document=doc)
+    _place(opts, doc)
     before = _stats(doc)
     pipeline = _pipeline(opts)
     if pipeline:
