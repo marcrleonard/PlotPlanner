@@ -98,3 +98,19 @@ def test_layout_reports_page_and_drawing_size(sample_svg):
 
     custom = optimize.optimize(sample_svg, {"paper": "120x80mm", "fit": False})
     assert custom["page_mm"] == [120.0, 80.0] and custom["bounds_mm"][2] > 120  # runs off the sheet
+
+
+BROKEN = """<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="20mm" viewBox="0 0 100 20">
+  <path d="M10 10 L30 10" stroke="#000"/><path d="M30.2 10 L50 10" stroke="#000"/>
+  <path d="M50.3 10 L70 10" stroke="#000"/><path d="M80 10 L80.1 10" stroke="#000"/>
+</svg>"""
+
+
+def test_merge_gap_joins_ends_closer_than_a_pen_width():
+    # gaps of 0.2 and 0.3 mm: joined by the 0.35 mm default, not by 0.1 mm
+    assert optimize.optimize(BROKEN, {"paper": None, "merge_tolerance": 0.1})["after"]["paths"] == 4
+    assert optimize.optimize(BROKEN, {"paper": None})["after"]["paths"] == 2
+
+
+def test_min_length_drops_specks():
+    assert optimize.optimize(BROKEN, {"paper": None, "min_length": 0.5})["after"]["paths"] == 1

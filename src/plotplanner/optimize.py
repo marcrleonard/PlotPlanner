@@ -34,12 +34,13 @@ class OptimizeOptions:
     margin: float = 15.0
     fit: bool = True  # scale to fill the margins; otherwise only centre
     merge: bool = True
-    merge_tolerance: float = 0.1
+    merge_tolerance: float = 0.35  # join line ends closer than this; about a pen's line width
     sort: bool = True
     two_opt: bool = False  # slower, better sort
     reloop: bool = False  # randomises loop start points; usually adds travel
     simplify: bool = True
     simplify_tolerance: float = 0.05
+    min_length: float = 0.0  # drop lines shorter than this; 0 keeps everything
     layers_from: str = "groups"  # one of LAYER_SOURCES
 
     @classmethod
@@ -104,6 +105,8 @@ def _pipeline(opts: OptimizeOptions) -> str:
     steps = []
     if opts.merge:
         steps.append(f"linemerge --tolerance {opts.merge_tolerance}mm")
+    if opts.min_length > 0:
+        steps.append(f"filter --min-length {opts.min_length}mm")
     # reloop randomises where closed paths start, so it has to run before sorting.
     if opts.reloop:
         steps.append("reloop")

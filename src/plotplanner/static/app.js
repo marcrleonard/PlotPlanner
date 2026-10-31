@@ -224,8 +224,40 @@ function optimizeOptions() {
     two_opt: f.two_opt.checked,
     reloop: f.reloop.checked,
     simplify: f.simplify.checked,
+    merge_tolerance: Number(f.merge_tolerance.value),
+    simplify_tolerance: Number(f.simplify_tolerance.value),
+    min_length: Number(f.min_length.value),
   };
 }
+
+// Advanced optimize sliders: start at the server's defaults ("auto"), tweakable, Auto resets them.
+const ADVANCED = ["merge_tolerance", "simplify_tolerance", "min_length"];
+
+function showAdvancedValue(input) {
+  const auto = Number(input.value) === Number(state.info?.optimize_defaults[input.name]);
+  const value = Number(input.value) === 0 ? "off" : `${Number(input.value)} mm`;
+  input.parentElement.querySelector("output").textContent = auto ? `${value} (auto)` : value;
+}
+
+function resetAdvanced() {
+  const f = $("#optimize-form");
+  for (const name of ADVANCED) {
+    f[name].value = state.info.optimize_defaults[name];
+    showAdvancedValue(f[name]);
+  }
+}
+
+for (const name of ADVANCED) {
+  const input = $("#optimize-form")[name];
+  input.addEventListener("input", () => showAdvancedValue(input));
+  // Once optimized, re-run on release so the line count follows the slider.
+  input.addEventListener("change", () => state.optimized && $("#optimize-form").requestSubmit());
+}
+
+$("#advanced-auto").addEventListener("click", () => {
+  resetAdvanced();
+  if (state.optimized) $("#optimize-form").requestSubmit();
+});
 
 function applyPrepared(result, optimized) {
   Object.assign(state, { current: result.svg, prepared: true, optimized, layers: result.layers });
@@ -341,7 +373,7 @@ $("#optimize-form").addEventListener("submit", (e) => {
     const { before: b, after: a } = result;
     const pct = b.travel_mm ? Math.round((100 * (b.travel_mm - a.travel_mm)) / b.travel_mm) : 0;
     kv($("#optimize-stats"), [
-      ["Paths", `${b.paths} → ${a.paths}`],
+      ["Lines (pen lifts)", `${b.paths} → ${a.paths}${b.paths ? ` (−${Math.round((100 * (b.paths - a.paths)) / b.paths)}%)` : ""}`],
       ["Pen-up travel", `${b.travel_mm} → ${a.travel_mm} mm${pct ? ` (${pct > 0 ? "−" : "+"}${Math.abs(pct)}%)` : ""}`],
       ["Drawing", `${(a.draw_mm / 1000).toFixed(1)} m`],
       ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
@@ -659,6 +691,7 @@ async function connect() {
   );
   paper.value = selected;
   fillSettings(state.info.settings);
+  resetAdvanced();
   poll();
 }
 

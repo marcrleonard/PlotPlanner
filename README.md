@@ -63,7 +63,7 @@ To install the command globally: `uv tool install git+https://github.com/marcrle
 | | |
 |---|---|
 | **Layout** | A file with a real size (mm, cm, in) plots at that size on its own page by default. Otherwise choose a paper preset (A6 to A2, Letter, Legal, Tabloid) or a custom size, with orientation, margins, and scale-to-fit or centre-only. The preview updates as you change them, shows the drawing's size in mm, and warns when the drawing runs off the paper or past what the machine can reach. |
-| **Optimize** | vpype's `linemerge`, `linesort` (optionally two-opt), `reloop` and `linesimplify`. You see pen-up travel before and after, typically 80%+ less, and can download the optimized SVG. |
+| **Optimize** | vpype's `linemerge`, `linesort` (optionally two-opt), `reloop` and `linesimplify`. Line ends closer than a pen's width (0.35 mm) are joined, which cut a dense hatched card from 5,941 lines to 2,217, each one a pen lift saved. Under **Advanced**, sliders tune the merge gap, simplification and dropping tiny specks, and the line count updates as you move them. You see lines and pen-up travel before and after, and can download the optimized SVG. |
 | **Layers and pens** | Each top-level group (Inkscape layer, LineDream `Group(label=…)` or plain `<g>`) becomes a layer, and drawing outside any group gets its own. Or make one layer per stroke colour. Plot one layer, or all of them with a pause before each layer to swap pens. |
 | **Plot** | Live progress on the preview, with paths done, the current path and time left. Pause, resume, and stop-and-home. Pen up, pen down and motors off for setup. |
 | **Live settings** | Pen heights, pen rates and delays, speeds, acceleration and constant speed change mid-plot. A new pen height is sent at once, so you can dial in pressure mid-stroke. Machine size, resolution, rotation and port stay locked until the plot ends. Changes made while paused apply on resume. |
@@ -142,6 +142,7 @@ run `sudo systemctl enable --now plotplanner`. On Linux the user needs serial ac
 plotplanner serve [--host 0.0.0.0] [--port 5001] [--token …] [--preview]
 
 plotplanner optimize drawing.svg --paper a4 -o drawing-opt.svg
+plotplanner optimize card.svg --paper source --merge-gap 0.5 --min-length 0.2 -o card-opt.svg
 plotplanner plot drawing.svg --paper a3 --margin 20        # Ctrl-C pauses; again stops and homes
 plotplanner plot drawing.svg --pen-changes --layers-from color
 plotplanner plot drawing.svg --as-is --layer 2

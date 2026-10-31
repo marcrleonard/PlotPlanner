@@ -73,7 +73,24 @@
             <label class="check"><input name="sort" type="checkbox" checked> Sort to cut pen-up travel</label>
             <label class="check indent"><input name="two_opt" type="checkbox"> Extra sort pass (slower)</label>
             <label class="check"><input name="reloop" type="checkbox"> Re-pick loop start points</label>
-            <label class="check"><input name="simplify" type="checkbox" checked> Simplify (0.05 mm)</label>
+            <label class="check"><input name="simplify" type="checkbox" checked> Simplify</label>
+            <details id="advanced">
+              <summary>Advanced</summary>
+              <div class="form">
+                <label>Merge gaps up to <output></output>
+                  <input name="merge_tolerance" type="range" min="0" max="1" step="0.05">
+                </label>
+                <label>Simplify within <output></output>
+                  <input name="simplify_tolerance" type="range" min="0" max="0.3" step="0.01">
+                </label>
+                <label>Drop lines shorter than <output></output>
+                  <input name="min_length" type="range" min="0" max="1" step="0.05">
+                </label>
+                <p class="hint">Gaps smaller than your pen's line width don't show, so merging up to about that width
+                  joins broken strokes without changing the drawing, and saves a pen lift each.</p>
+                <div class="buttons"><button type="button" id="advanced-auto">Auto</button></div>
+              </div>
+            </details>
           </fieldset>
           <div id="layout-info" class="kv" hidden></div>
           <ul id="layout-warnings" class="warnings" hidden></ul>
