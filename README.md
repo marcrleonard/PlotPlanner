@@ -62,7 +62,7 @@ To install the command globally: `uv tool install git+https://github.com/marcrle
 
 | | |
 |---|---|
-| **Quick plot** | The default. The drawing at its own size, or a width you type, placed a set offset from the plotter's top-left corner, where the pen starts. No paper to choose: the sheet is the machine's reach, so nothing gets rotated or clipped unexpectedly. |
+| **Quick plot** | The default. The drawing at its own size, or a width you type, placed a set offset from the plotter's top-left corner, where the pen starts. No paper to choose: the sheet is the machine's reach, so nothing gets rotated or clipped unexpectedly. Size and place by **the file's page** (a 6 × 4 in card keeps its built-in padding) or by **the lines** alone. |
 | **Lay out on paper** | Paper presets (A6 to A2, Letter, Legal, Tabloid), a custom size, or the file's own page. Orientation, a position (centre, or anchored a margin in from any edge or corner), and optional scale-to-fit. The preview updates as you change them, shows the drawing's size in mm, and warns when the drawing runs off the paper or past what the machine can reach. |
 | **True-size preview** | Set your pen's width and every stroke is drawn that wide, so you can see where hatching fills in before you ink it. Zoom with − / Fit / 1:1 / +, pinch or ⌘/Ctrl-scroll (around the pointer), and drag to pan; keys `F`, `1`, `+`, `−`. **Calibrate** once with a bank card so 1:1 matches a ruler on your screen. |
 | **Rulers and overlays** | mm or inch rulers along the preview, zeroed at the pen's start corner, with the drawing's extent shaded. Overlay a 4×6, 5×7, A6, A5, A4 or Letter outline from the corner to see what fits. |

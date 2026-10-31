@@ -47,6 +47,13 @@
             <label><input type="radio" name="mode" value="layout"> Lay out on paper</label>
           </div>
 
+          <label>Size and place by
+            <select name="reference">
+              <option value="page">The file's page</option>
+              <option value="lines">The lines only</option>
+            </select>
+          </label>
+
           <div data-mode="quick" class="form">
             <p class="hint">Plots from the plotter's top-left corner. Put the paper's corner under the pen before you start.</p>
             <label>Size

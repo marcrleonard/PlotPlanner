@@ -149,3 +149,27 @@ def test_width_scales_the_drawing_keeping_proportions(sample_svg):
                                            "position": "top-left", "margin": 10, "width": 100})["bounds_mm"]
     assert [round(v, 1) for v in sized[:3]] == [10.0, 10.0, 100.0]
     assert abs(sized[3] - natural[3] * 100 / natural[2]) < 0.1
+
+
+CARD = "tests/data/card_6x4in.svg"  # a 6 x 4 in page whose lines sit inside ~0.3 in of padding
+
+
+def test_reference_page_places_the_whole_card():
+    svg = open(CARD).read()
+    quick = {**optimize.AS_IS.__dict__, "paper": "430x297mm", "orientation": "landscape", "position": "top-left",
+             "margin": 10}
+    by_lines = optimize.optimize(svg, {**quick, "reference": "lines"})["bounds_mm"]
+    by_page = optimize.optimize(svg, {**quick, "reference": "page"})["bounds_mm"]
+    # by lines: the lines start 10 mm in; by page: the card's corner is 10 mm in, its padding kept
+    assert [round(v, 1) for v in by_lines[:2]] == [10.0, 10.0]
+    assert abs(by_page[0] - (10 + 0.385 * 25.4)) < 0.3 and abs(by_page[1] - (10 + 0.269 * 25.4)) < 0.3
+    assert abs(by_page[2] - by_lines[2]) < 0.1  # same size either way: as drawn
+
+
+def test_reference_page_width_scales_the_card():
+    svg = open(CARD).read()
+    result = optimize.optimize(svg, {**optimize.AS_IS.__dict__, "paper": "430x297mm", "orientation": "landscape",
+                                     "position": "top-left", "margin": 0, "width": 76.2, "reference": "page"})
+    # card 6 in -> 3 in wide: the lines halve too, and keep their padding (halved)
+    x, y, w, h = result["bounds_mm"]
+    assert abs(w - 5.231 * 25.4 / 2) < 0.2 and abs(x - 0.385 * 25.4 / 2) < 0.2

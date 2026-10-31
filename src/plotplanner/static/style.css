@@ -333,3 +333,4 @@ dialog h2 { margin: 0; font-size: 26px; }
 .viewbar select { padding: 4px 6px; font-size: 13px; }
 .canvas svg .overlay { fill: rgb(57 168 201 / 0.06); stroke: var(--accent); stroke-width: 1.5px; stroke-dasharray: 8 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .canvas svg .overlay-label { fill: var(--accent); pointer-events: none; font-family: var(--body); }
+.canvas svg .guide.card { stroke: var(--text); stroke-dasharray: 3 3; opacity: 0.6; }

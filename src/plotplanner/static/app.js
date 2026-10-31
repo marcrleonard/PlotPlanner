@@ -12,7 +12,7 @@ const store = {
   },
 };
 
-const AS_IS = { paper: null, merge: false, sort: false, reloop: false, simplify: false };
+const AS_IS = { paper: null, fit: false, merge: false, sort: false, reloop: false, simplify: false };
 const INKSCAPE = "http://www.inkscape.org/namespaces/inkscape";
 
 const state = {
@@ -290,7 +290,8 @@ function drawRulers() {
   const r = svg.getBoundingClientRect();
   const x = $("#ruler-x").getBoundingClientRect();
   const y = $("#ruler-y").getBoundingClientRect();
-  const b = state.step === "prepare" ? state.layout?.bounds_mm : null;
+  const l = state.step === "prepare" ? state.layout : null;
+  const b = l && (l.options?.reference === "page" && l.box_mm ? l.box_mm : l.bounds_mm);
   drawRuler($("#ruler-x"), true, r.left - x.left, b && [b[0], b[2]]);
   drawRuler($("#ruler-y"), false, r.top - y.top, b && [b[1], b[3]]);
 }
@@ -376,7 +377,9 @@ function describe(svgText) {
     .filter((g) => g.getAttributeNS(INKSCAPE, "groupmode") === "layer")
     .map((g) => g.getAttributeNS(INKSCAPE, "label") || g.id);
   const physical = /\d\s*(mm|cm|in|pt|pc|q)\s*$/i.test(svg.getAttribute("width") || "");
-  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers, physical };
+  const pageMm = [lengthMm(svg.getAttribute("width")), lengthMm(svg.getAttribute("height"))];
+  return { width: svg.getAttribute("width") || "–", height: svg.getAttribute("height") || "–", count, layers, physical,
+    pageMm: pageMm.every(Boolean) ? pageMm : null };
 }
 
 function kv(el, rows) {
@@ -431,6 +434,13 @@ function loadText(text, name) {
   // scaled to the margins instead.
   $("#optimize-form").fit.checked = !d.physical;
   if (!d.physical) $("#optimize-form").size_mode.value = "width";
+  // A file with a real size was designed on its page (a card with its padding, say): size and place
+  // by that page. A unitless file's page means nothing, so use its lines.
+  state.docPageMm = d.pageMm;
+  const reference = $("#optimize-form").reference;
+  reference.value = d.physical ? "page" : "lines";
+  reference.options[0].textContent = d.physical
+    ? `The file's page (${d.width} × ${d.height})` : "The file's page";
   showMode();
   $("#custom-size").hidden = true;
   $("#layout-info").hidden = $("#layout-warnings").hidden = true; // the new file's layout is on its way
@@ -514,6 +524,7 @@ function optimizeOptions() {
   const f = $("#optimize-form");
   return {
     ...placementOptions(),
+    reference: f.reference.value,
     layers_from: f.layers_from.value,
     merge: f.merge.checked,
     sort: f.sort.checked,
@@ -585,7 +596,7 @@ function applyPrepared(result, optimized) {
 // Layout preview: the sheet at the chosen size with the drawing placed on it, exactly as it will
 // plot. Changing a layout field re-runs only vpype's layout (quick); Optimize adds the sorting.
 const PX_PER_MM = 96 / 25.4;
-const LAYOUT_FIELDS = ["mode", "size_mode", "quick_width", "quick_offset",
+const LAYOUT_FIELDS = ["mode", "reference", "size_mode", "quick_width", "quick_offset",
   "paper", "paper_w", "paper_h", "orientation", "margin", "fit", "position", "layers_from"];
 
 function showMode() {
@@ -601,8 +612,10 @@ function showMode() {
   showMode();
   f.addEventListener("change", (e) => {
     if (e.target.name === "mode") store.set("pp.mode", prepareMode());
-    if (e.target.name === "size_mode" && f.size_mode.value === "width" && state.layout?.bounds_mm) {
-      f.quick_width.value = Math.round(state.layout.bounds_mm[2]); // start from the current width
+    if (e.target.name === "size_mode" && f.size_mode.value === "width") {
+      // Start from the current width of whatever sizing is measured by.
+      const width = f.reference.value === "page" && state.docPageMm ? state.docPageMm[0] : state.layout?.bounds_mm?.[2];
+      if (width) f.quick_width.value = Math.round(width);
     }
     if (e.target.name === "mode" || e.target.name === "size_mode") showMode();
   });
@@ -614,6 +627,14 @@ function showLayout() {
   const svg = $("svg", canvas);
   if (!result?.page_mm || !svg) return;
   const opts = result.options;
+  // When sizing by the file's page, outline where that page (the card) lands.
+  if (opts.reference === "page" && result.box_mm) {
+    const [x, y, w, h] = result.box_mm;
+    const card = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    for (const [k, v] of Object.entries({ x, y, width: w, height: h })) card.setAttribute(k, v * PX_PER_MM);
+    card.setAttribute("class", "guide card");
+    svg.append(card);
+  }
   // Margin guide wherever the margin matters: scaling to fit, or anchoring to an edge.
   if (prepareMode() === "layout" && opts.margin > 0 && (opts.fit || !["keep", "center"].includes(opts.position))) {
     const [w, h] = result.page_mm;
@@ -642,7 +663,11 @@ function layoutInfo() {
   const paperName = prepareMode() === "quick" ? "Plotter reach"
     : result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
   const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
-  if (result.bounds_mm) rows.push(["Drawing", fmtMm(result.bounds_mm.slice(2))]);
+  if (result.options.reference === "page" && result.box_mm) {
+    const [x, y, w, h] = result.box_mm;
+    rows.push(["Page", `${fmtMm([w, h])} at ${Math.round(x)}, ${Math.round(y)} mm`]);
+  }
+  if (result.bounds_mm) rows.push(["Lines", fmtMm(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
 
   const warnings = [];

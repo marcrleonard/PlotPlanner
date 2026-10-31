@@ -18,6 +18,7 @@ PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid"]
 ORIENTATIONS = ["auto", "source", "portrait", "landscape"]
 # Where the drawing sits on the sheet. "keep" leaves it where it is relative to the page's top-left
 # corner; the rest anchor it that far in from the edges by the margin.
+REFERENCES = ["lines", "page"]
 POSITIONS = ["keep", "center", "top-left", "top", "top-right", "left", "right", "bottom-left", "bottom", "bottom-right"]
 LAYER_SOURCES = ["groups", "color"]  # what becomes a layer (a pen): top-level groups, or stroke colours
 UNGROUPED = "ungrouped"
@@ -38,6 +39,7 @@ class OptimizeOptions:
     fit: bool = True  # scale to fill the margins
     position: str = "keep"  # one of POSITIONS
     width: float | None = None  # scale the drawing to this width in mm, keeping proportions
+    reference: str = "lines"  # size and place by the lines' bounding box, or the file's own "page"
     merge: bool = True
     merge_tolerance: float = 0.35  # join line ends closer than this; about a pen's line width
     sort: bool = True
@@ -57,6 +59,8 @@ class OptimizeOptions:
             opts.paper = None
         if opts.orientation not in ORIENTATIONS:
             raise ValueError(f"orientation must be one of {ORIENTATIONS}")
+        if opts.reference not in REFERENCES:
+            raise ValueError(f"reference must be one of {REFERENCES}")
         if opts.position not in POSITIONS:
             raise ValueError(f"position must be one of {POSITIONS}")
         if opts.layers_from not in LAYER_SOURCES:
@@ -86,43 +90,64 @@ def _paper_size(paper: str) -> tuple[float, float]:
     return min(w, h), max(w, h)
 
 
-def _layout(opts: OptimizeOptions, doc: vp.Document) -> str:
-    if not opts.paper:
-        return ""
-    w, h = _paper_size(opts.paper)
-    if opts.orientation == "landscape":
-        landscape = True
-    elif opts.orientation == "portrait":
-        landscape = False
-    elif opts.orientation == "source" and doc.page_size:
-        landscape = doc.page_size[0] > doc.page_size[1]
-    else:
-        bounds = doc.bounds()
-        landscape = bool(bounds) and (bounds[2] - bounds[0]) > (bounds[3] - bounds[1])
-    # vpype treats every size as portrait and rotates the page with --landscape.
-    args = f"{w / PX_PER_MM:.3f}x{h / PX_PER_MM:.3f}mm"
-    if landscape:
-        args = f"--landscape {args}"
-    if opts.fit:
-        return f"layout --fit-to-margins {opts.margin}mm {args}"
-    # Not scaling: only set the sheet; _place() moves the drawing if a position is chosen.
-    return f"pagesize {args}"
+def _arrange(opts: OptimizeOptions, doc: vp.Document) -> list[float] | None:
+    """Size the sheet, then scale and place the drawing on it.
 
+    Sizing and placement use either the lines' bounding box or the file's own page (opts.reference),
+    so a card designed with padding inside a 6 x 4 in page can be handled as that 6 x 4 in card.
 
-def _place(opts: OptimizeOptions, doc: vp.Document) -> None:
-    """Move the drawing to opts.position, opts.margin in from the edges it is anchored to."""
+    Returns the box that was sized and placed, as [x0, y0, x1, y1] in px on the sheet.
+    """
     bounds = doc.bounds()
-    if opts.position == "keep" or not bounds or not doc.page_size:
-        return
+    if not bounds:
+        return None
+    source = doc.page_size
+    if opts.reference == "page" and source:
+        box = [0.0, 0.0, float(source[0]), float(source[1])]
+    else:
+        box = [float(v) for v in bounds]
+
+    def scale(factor: float) -> None:
+        doc.scale(factor, factor)  # about the origin, like the box below
+        box[:] = [v * factor for v in box]
+
+    if opts.width and box[2] > box[0]:
+        scale(opts.width * PX_PER_MM / (box[2] - box[0]))
+
+    if opts.paper:
+        w, h = _paper_size(opts.paper)
+        if opts.orientation == "landscape":
+            landscape = True
+        elif opts.orientation == "portrait":
+            landscape = False
+        elif opts.orientation == "source" and source:
+            landscape = source[0] > source[1]
+        else:
+            landscape = (box[2] - box[0]) > (box[3] - box[1])
+        doc.page_size = (h, w) if landscape else (w, h)
+    elif opts.width and opts.reference == "page":
+        doc.page_size = (box[2], box[3])  # no paper chosen: the page is the drawing's own, rescaled
+    if not doc.page_size:
+        return box
     pw, ph = doc.page_size
     m = opts.margin * PX_PER_MM
-    x0, y0, x1, y1 = bounds
-    w, h = x1 - x0, y1 - y0
-    horizontal = "left" if "left" in opts.position else "right" if "right" in opts.position else "center"
-    vertical = "top" if "top" in opts.position else "bottom" if "bottom" in opts.position else "center"
-    x = {"left": m, "right": pw - m - w, "center": (pw - w) / 2}[horizontal]
-    y = {"top": m, "bottom": ph - m - h, "center": (ph - h) / 2}[vertical]
-    doc.translate(x - x0, y - y0)
+
+    position = opts.position
+    if opts.fit:
+        bw, bh = box[2] - box[0], box[3] - box[1]
+        if bw > 0 and bh > 0:
+            scale(min((pw - 2 * m) / bw, (ph - 2 * m) / bh))
+        if position == "keep":
+            position = "center"
+    if position == "keep":
+        return box
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    horizontal = "left" if "left" in position else "right" if "right" in position else "center"
+    vertical = "top" if "top" in position else "bottom" if "bottom" in position else "center"
+    x = {"left": m, "right": pw - m - bw, "center": (pw - bw) / 2}[horizontal]
+    y = {"top": m, "bottom": ph - m - bh, "center": (ph - bh) / 2}[vertical]
+    doc.translate(x - box[0], y - box[1])
+    return [x, y, x + bw, y + bh]
 
 
 def _pipeline(opts: OptimizeOptions) -> str:
@@ -242,17 +267,8 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
     doc, source_names = _read(svg, opts)
     if doc.is_empty():
         raise ValueError("no drawable paths found in SVG")
-    if opts.width:
-        x0, _, x1, _ = doc.bounds()
-        if x1 > x0:
-            factor = opts.width * PX_PER_MM / (x1 - x0)
-            doc.scale(factor, factor)
-
     # Lay out first so the stats compare like with like and tolerances are in final millimetres.
-    layout = _layout(opts, doc)
-    if layout:
-        doc = vpype_cli.execute(layout, document=doc)
-    _place(opts, doc)
+    box = _arrange(opts, doc)
     before = _stats(doc)
     pipeline = _pipeline(opts)
     if pipeline:
@@ -273,13 +289,15 @@ def optimize(svg: str, options: OptimizeOptions | dict | None = None) -> dict:
         # x, y, width, height of the drawing on the page
         "bounds_mm": [round(float(v) / PX_PER_MM, 1) for v in (bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1])]
         if bounds else None,
+        "box_mm": [round(float(v) / PX_PER_MM, 1) for v in (box[0], box[1], box[2] - box[0], box[3] - box[1])]
+        if box else None,
         "layers": [{"id": lid, "name": names[lid] or ""} for lid in sorted(doc.layers)],
         "before": before,
         "after": after,
     }
 
 
-AS_IS = OptimizeOptions(paper=None, merge=False, sort=False, reloop=False, simplify=False)
+AS_IS = OptimizeOptions(paper=None, fit=False, merge=False, sort=False, reloop=False, simplify=False)
 
 
 def is_prepared(svg: str) -> bool:
