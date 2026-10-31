@@ -15,6 +15,7 @@ def test_page_and_info(client):
     info = client.get("/api/info").get_json()
     assert "a3" in info["paper_sizes"] and info["preview"] is True
     assert info["machine_travel_mm"]["2"] == [430, 297]
+    assert info["pen_reversed"] is True  # iDraw: a lower position number is a higher pen
 
 
 def test_optimize_plot_status(client, sample_svg):

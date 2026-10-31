@@ -142,7 +142,7 @@ const view = {
     if (this.mode === "fit") this.scale = this.fitScale(page);
     svg.setAttribute("width", Math.max(1, Math.round(page.w * this.scale)));
     svg.setAttribute("height", Math.max(1, Math.round(page.h * this.scale)));
-    svg.style.setProperty("--pen", String(penWidth() * page.unitsPerMm));
+    svg.style.setProperty("--pen", `${penWidth() * this.scale}px`);
     $("#zoom-label").textContent = `${Math.round((100 * this.scale) / this.pxPerMm)}%`;
     drawOverlay(svg, page);
     requestAnimationFrame(drawRulers);
@@ -494,7 +494,16 @@ function prepareMode() {
 // rotated or clipped beyond what the plotter can draw.
 function machineReach() {
   const settings = state.status?.settings ?? state.info?.settings ?? {};
-  return state.info?.machine_travel_mm?.[settings.model] ?? [430, 297];
+  const model = state.info?.machine_travel_mm?.[settings.model] ?? [430, 297];
+  return [settings.reach_x || model[0], settings.reach_y || model[1]];
+}
+
+function overridePlaceholders() {
+  const f = settingsForm.elements;
+  const model = state.info?.machine_travel_mm?.[f.model.value] ?? [];
+  f.reach_x.placeholder = model[0] ? `${model[0]} (machine size)` : "machine size";
+  f.reach_y.placeholder = model[1] ? `${model[1]} (machine size)` : "machine size";
+  f.steps_per_inch.placeholder = `${state.info?.default_steps_per_inch ?? ""} (driver)`;
 }
 
 function placementOptions() {
@@ -834,6 +843,60 @@ $("#pause-button").addEventListener("click", (e) =>
   }, e.currentTarget),
 );
 
+$("#home-button").addEventListener("click", (e) =>
+  guarded(async () => {
+    await api("/home", { method: "POST" });
+    poll();
+  }, e.currentTarget),
+);
+
+// ------------------------------------------------------------------ drive and calibrate
+
+async function drive(body, button) {
+  return guarded(async () => applyStatus(await api("/jog", { method: "POST", body })), button);
+}
+
+$$("[data-jog]").forEach((button) => button.addEventListener("click", () => {
+  const [sx, sy] = button.dataset.jog.split(",").map(Number);
+  const step = Number($("#jog-step").value);
+  drive({ dx: sx * step, dy: sy * step }, button);
+}));
+$("#jog-back").addEventListener("click", (e) => drive({ action: "back" }, e.currentTarget));
+$("#jog-set").addEventListener("click", (e) => drive({ action: "set_start" }, e.currentTarget));
+
+$("#jog-reach").addEventListener("click", (e) => {
+  const at = state.status?.jog;
+  if (!at || !(at[0] > 0 && at[1] > 0)) return toast("Drive to the far corner first (both X and Y away from the start).", true);
+  if (!confirm(`Save ${at[0]} × ${at[1]} mm as the furthest the plotter can reach?`)) return;
+  guarded(async () => {
+    fillSettings(await api("/settings", { method: "POST", body: { reach_x: at[0], reach_y: at[1] } }));
+    toast(`Reach set to ${at[0]} × ${at[1]} mm.`);
+    if (prepareMode() === "quick") previewLayout();
+  }, e.currentTarget);
+});
+
+$("#scale-draw").addEventListener("click", (e) =>
+  guarded(async () => {
+    await api("/manual", { method: "POST", body: { command: "lower_pen" } });
+    await api("/jog", { method: "POST", body: { dx: 100, dy: 0 } });
+    await api("/manual", { method: "POST", body: { command: "raise_pen" } });
+    toast("Drew a 100 mm line. Measure it and enter the length.");
+    poll();
+  }, e.currentTarget),
+);
+
+$("#scale-apply").addEventListener("click", (e) => {
+  const measured = Number($("#scale-measured").value);
+  if (!(measured > 10)) return toast("Enter the measured length of the 100 mm line, in mm.", true);
+  const settings = state.status?.settings ?? state.info.settings;
+  const current = settings.steps_per_inch || state.info.default_steps_per_inch;
+  const corrected = Math.round(((current * 100) / measured) * 10) / 10;
+  guarded(async () => {
+    fillSettings(await api("/settings", { method: "POST", body: { steps_per_inch: corrected } }));
+    $("#scale-info").textContent = `Steps per inch ${current} → ${corrected}. Draw another line to check.`;
+  }, e.currentTarget);
+});
+
 $("#stop-button").addEventListener("click", (e) => {
   if (!confirm("Stop the plot and send the pen home?")) return;
   guarded(async () => {
@@ -847,6 +910,7 @@ $$("[data-manual]").forEach((button) =>
     guarded(async () => {
       const result = await api("/manual", { method: "POST", body: { command: button.dataset.manual } });
       if (result.output?.length) toast(result.output.join(" "));
+      applyStatus(result.status); // e.g. motors off: the position becomes unknown
     }, button),
   ),
 );
@@ -857,19 +921,38 @@ const settingsForm = $("#settings-form");
 
 // Fill the form from the server. Skips the control being edited, so another client's (or the
 // server's) values never yank a slider out from under you.
+// Pen positions are shown as heights (higher number, higher pen). On the iDraw the servo works the
+// other way round (a lower position number is a higher pen), so those two are mirrored.
+const PEN_FIELDS = ["pen_pos_up", "pen_pos_down"];
+const OVERRIDES = ["reach_x", "reach_y", "steps_per_inch"];
+
+function penHeight(name, value) {
+  return PEN_FIELDS.includes(name) && state.info?.pen_reversed ? 100 - value : value;
+}
+
 function fillSettings(settings) {
-  for (const [key, value] of Object.entries(settings)) {
+  for (const [key, raw] of Object.entries(settings)) {
     const input = settingsForm.elements[key];
     if (!input || input === document.activeElement) continue;
+    // Calibration overrides of 0 mean "use the default": show them blank, with the default as placeholder.
+    const value = OVERRIDES.includes(key) && !raw ? "" : penHeight(key, raw);
     if (input.type === "checkbox") input.checked = Boolean(value);
     else if (String(input.value) !== String(value)) input.value = value;
     else continue;
     input.dispatchEvent(new Event("input"));
   }
+  penWarning();
 }
 
 function settingValue(input) {
-  return input.type === "checkbox" ? input.checked : input.type === "text" ? input.value : Number(input.value);
+  if (input.type === "checkbox") return input.checked;
+  if (input.type === "text") return input.value;
+  return penHeight(input.name, Number(input.value)); // mirrored back for the plotter
+}
+
+function penWarning() {
+  const f = settingsForm.elements;
+  $("#pen-warning").hidden = Number(f.pen_pos_up.value) > Number(f.pen_pos_down.value);
 }
 
 function readSettings() {
@@ -880,7 +963,10 @@ function readSettings() {
 
 $$('input[type="range"]', settingsForm).forEach((input) => {
   const output = input.parentElement.querySelector("output");
-  input.addEventListener("input", () => (output.textContent = input.value));
+  input.addEventListener("input", () => {
+    output.textContent = input.value;
+    if (PEN_FIELDS.includes(input.name)) penWarning();
+  });
 });
 
 // Every control applies when you let go of it; during a plot the server hands speed and pen
@@ -894,9 +980,16 @@ settingsForm.addEventListener("change", (e) => {
       fillSettings(settings);
       if (state.status) state.status.settings = settings;
       layoutInfo(); // the reach warning depends on machine size and auto-rotate
+      overridePlaceholders();
+      if (["reach_x", "reach_y"].includes(input.name) && prepareMode() === "quick") previewLayout();
       if (input.name === "model" && prepareMode() === "quick") previewLayout(); // the sheet is the reach
       const label = input.closest("label").textContent.replace(/\s+/g, " ").trim();
-      if (state.status?.state === "plotting") toast(`Applied: ${label}`);
+      const s = state.status?.state ?? "idle";
+      if (s === "plotting") toast(`Applied: ${label}`);
+      // Idle or paused: move the pen to the height just set, so it can be dialled in by eye.
+      if (PEN_FIELDS.includes(input.name) && (s === "idle" || s === "paused")) {
+        await api("/manual", { method: "POST", body: { command: input.name === "pen_pos_up" ? "raise_pen" : "lower_pen" } });
+      }
     } catch (err) {
       input.blur();
       if (state.status?.settings) fillSettings(state.status.settings);
@@ -933,6 +1026,9 @@ function applyStatus(s) {
   const label = $("#plot-state");
   label.textContent = s.preview ? `${s.state} (preview)` : s.state;
   label.className = `state ${s.state}`;
+  const jog = s.jog;
+  $("#drive-pos").textContent = !jog ? "Position unknown (motors were off): move it to the start and Set start here"
+    : jog[0] || jog[1] ? `X ${jog[0]} mm, Y ${jog[1]} mm from the start corner` : "At the start corner";
   const penChange = $("#pen-change");
   penChange.hidden = !(s.state === "paused" && s.pen_change);
   if (!penChange.hidden) {
@@ -960,7 +1056,11 @@ function updateControls() {
   $("#plot-button").disabled = busy || !state.current || !state.online;
   $("#pause-button").disabled = !(s === "plotting" || s === "paused");
   $("#pause-button").textContent = s === "paused" ? "Resume" : "Pause";
-  $("#stop-button").disabled = !(s === "plotting" || s === "paused");
+  $("#stop-button").disabled = !(s === "plotting" || s === "paused" || s === "homing");
+  $("#home-button").disabled = s !== "paused";
+  const canDrive = state.online && s === "idle";
+  $$("#drive button, #jog-step, #scale-measured").forEach((el) => (el.disabled = !canDrive));
+  if (canDrive && !state.status?.jog) $("#jog-back").disabled = true;
   $("#layer").disabled = busy || state.layers.length < 2;
   $("#pen-changes").disabled = busy || state.layers.length < 2 || Boolean($("#layer").value);
   for (const b of $$("[data-manual]")) {
@@ -1016,7 +1116,7 @@ async function poll() {
   }
   updateControls();
   const s = state.status?.state;
-  pollTimer = setTimeout(poll, s === "plotting" || s === "stopping" ? 1000 : 3000);
+  pollTimer = setTimeout(poll, s === "plotting" || s === "stopping" || s === "homing" ? 1000 : 3000);
 }
 
 // ------------------------------------------------------------------ server
@@ -1063,6 +1163,7 @@ async function connect() {
   );
   paper.value = selected;
   fillSettings(state.info.settings);
+  overridePlaceholders();
   resetAdvanced();
   poll();
 }

@@ -22,6 +22,7 @@ REFERENCES = ["lines", "page"]
 POSITIONS = ["keep", "center", "top-left", "top", "top-right", "left", "right", "bottom-left", "bottom", "bottom-right"]
 LAYER_SOURCES = ["groups", "color"]  # what becomes a layer (a pen): top-level groups, or stroke colours
 UNGROUPED = "ungrouped"
+NON_PLOTTING_PREFIX = "%"  # a layer whose name starts with "%" is documentation, never plotted
 PEN_CHANGE_PREFIX = "!"  # the driver pauses at a layer whose name starts with "!"
 # Top-level elements that are not drawing.
 NON_DRAWING = {"defs", "metadata", "title", "desc", "style", "script", "namedview"}
@@ -194,9 +195,22 @@ def _group_layers(svg: str) -> tuple[str, dict[int, str]]:
     return etree.tostring(root, encoding="unicode"), names
 
 
+def _drop_non_plotting(svg: str) -> str:
+    """Remove top-level layers whose name starts with "%": the plotting convention for
+    documentation layers (guides, crop marks, notes) that must never be drawn."""
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    dropped = False
+    for g in list(root.iterfind("svg:g", NSMAP)):
+        if (g.get(f"{{{INKSCAPE_NS}}}label") or "").lstrip().startswith(NON_PLOTTING_PREFIX):
+            root.remove(g)
+            dropped = True
+    return etree.tostring(root, encoding="unicode") if dropped else svg
+
+
 def _read(svg: str, opts: OptimizeOptions) -> tuple[vp.Document, dict[int, str]]:
     # 0.1 mm quantization: curves become polylines well below pen width.
     quantization = 0.1 * PX_PER_MM
+    svg = _drop_non_plotting(svg)
     if opts.layers_from == "color":
         doc = vp.read_svg_by_attributes(io.StringIO(svg), ["stroke"], quantization)
         names = {lid: str(layer.property(vp.METADATA_FIELD_COLOR) or "") for lid, layer in doc.layers.items()}

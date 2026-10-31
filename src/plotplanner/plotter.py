@@ -11,7 +11,7 @@ from . import driver, optimize
 
 log = logging.getLogger(__name__)
 
-IDLE, PLOTTING, PAUSED, STOPPING = "idle", "plotting", "paused", "stopping"
+IDLE, PLOTTING, PAUSED, STOPPING, HOMING = "idle", "plotting", "paused", "stopping", "homing"
 DRIVER_LOGGERS = ("axidrawinternal", "plotink")
 
 
@@ -48,6 +48,9 @@ class Plotter:
         self._resume_svg: str | None = None  # driver output carrying resume data
         self.layer: int | None = None
         self.pen_change: str | None = None  # paused waiting for this layer's pen ("2 waves")
+        # Where the carriage is relative to the start corner after jogging, in mm; None once the
+        # motors have been off (it may have been moved by hand) until "set start here".
+        self.offset: list[float] | None = [0.0, 0.0]
         self.paths_total = 0
         self.current_path: str | None = None
         self.completed: list[str] = []
@@ -66,6 +69,14 @@ class Plotter:
             svg = optimize.optimize(svg, optimize.AS_IS)["svg"]  # numbers the paths; outside the lock
         if pen_changes and layer is None:
             svg = optimize.add_pen_changes(svg)
+        with self._lock:
+            # Plots start from the start corner: undo any jogging first. (The driver measures from
+            # wherever the carriage is, so a jogged carriage would silently move the whole plot.)
+            if self.state == IDLE:
+                if self.offset and any(self.offset):
+                    self._message("Returning to the start corner before plotting.")
+                    self._walk(-self.offset[0], -self.offset[1])
+                self.offset = [0.0, 0.0]
         with self._lock:
             if self.state != IDLE:
                 raise PlotterBusy(f"plotter is {self.state}")
@@ -95,6 +106,16 @@ class Plotter:
                 raise PlotterBusy(f"cannot resume while {self.state}")
             self._start("res_plot", self._resume_svg)
 
+    def home(self) -> None:
+        """While paused: drive back to the start corner, pen up. Resume still picks up where it paused."""
+        with self._lock:
+            if self.state != PAUSED:
+                raise PlotterBusy("home is available while paused (stop already returns home)")
+            pen_change = self.pen_change
+            self._message("Returning home; Resume continues where it paused.")
+            self._start("res_home", self._resume_svg, state=HOMING)
+            self.pen_change = pen_change
+
     def stop(self) -> None:
         """Stop the plot, raise the pen and drive home."""
         with self._lock:
@@ -106,6 +127,8 @@ class Plotter:
                 self._stop.set()
                 self._message("Stopping: returning home.")
                 self._start("res_home", self._resume_svg, state=STOPPING)
+            elif self.state == HOMING:
+                self._stop.set()  # finish the trip home, then forget the plot
             elif self.state != STOPPING:
                 raise PlotterBusy("nothing to stop")
 
@@ -121,8 +144,56 @@ class Plotter:
             ad = driver.Driver(message=lambda m: (output.append(str(m).strip()), self._message(m)))
             ad.configure(None, self.settings, mode="manual", preview=self.preview)
             ad.options.manual_cmd = command
+            ad.force_pen = command in ("raise_pen", "lower_pen")
             ad.plot_run()
+            if command == "disable_xy":
+                self.offset = None  # free to be pushed by hand: position unknown
+            elif command == "enable_xy" and self.offset is None:
+                self.offset = [0.0, 0.0]  # the motors lock wherever it is now
             return [m for m in output if m]
+
+    def jog(self, dx: float, dy: float) -> list[float] | None:
+        """Drive the carriage dx, dy mm (pen left as it is: lower it to draw a test line).
+
+        Stops at the start corner rather than driving into the home end stop.
+        """
+        with self._lock:
+            if self.state != IDLE:
+                raise PlotterBusy(f"cannot drive while {self.state} (use Home while paused)")
+            if self.offset is not None:
+                dx, dy = max(dx, -self.offset[0]), max(dy, -self.offset[1])
+            self._walk(dx, dy)
+            if self.offset is not None:
+                self.offset = [round(self.offset[0] + dx, 3), round(self.offset[1] + dy, 3)]
+            return self.offset
+
+    def back_to_start(self) -> None:
+        with self._lock:
+            if self.state != IDLE:
+                raise PlotterBusy(f"cannot drive while {self.state}")
+            if self.offset is None:
+                raise ValueError("position unknown since the motors were off: move it by hand and Set start here")
+            self._walk(-self.offset[0], -self.offset[1])
+            self.offset = [0.0, 0.0]
+
+    def set_start(self) -> None:
+        """Declare the carriage's current position the start corner."""
+        with self._lock:
+            if self.state != IDLE:
+                raise PlotterBusy(f"cannot set the start while {self.state}")
+            self.offset = [0.0, 0.0]
+
+    def _walk(self, dx: float, dy: float) -> None:
+        for command, distance in (("walk_mmx", dx), ("walk_mmy", dy)):
+            if abs(distance) < 1e-6:
+                continue
+            ad = driver.Driver(message=self._message)
+            ad.configure(None, self.settings, mode="manual", preview=self.preview)
+            ad.options.manual_cmd = command
+            ad.options.walk_dist = distance
+            ad.plot_run()
+            if ad.serial_port is None and not self.preview:
+                raise RuntimeError("no plotter found")
 
     def update_settings(self, settings: dict) -> dict:
         """Change settings. During a plot, speed and pen settings take effect from the next
@@ -154,6 +225,7 @@ class Plotter:
                 "preview": self.preview,
                 "layer": self.layer,
                 "pen_change": self.pen_change,
+                "jog": self.offset,
                 "paths_total": self.paths_total,
                 "paths_done": len(self.completed),
                 "current_path": self.current_path,
@@ -204,7 +276,11 @@ class Plotter:
                 stopped = False
             with self._lock:
                 self.current_path = None
-                if stopped:
+                if mode == "res_home" and not self._stop.is_set():
+                    # Home from a pause: still paused, and the output keeps the resume data.
+                    self._resume_svg = out
+                    self.state = PAUSED
+                elif stopped:
                     self._resume_svg = out
                     self.pen_change = pen_change
                     self.state = PAUSED

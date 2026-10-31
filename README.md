@@ -70,6 +70,7 @@ To install the command globally: `uv tool install git+https://github.com/marcrle
 | **Layers and pens** | Each top-level group (Inkscape layer, LineDream `Group(label=…)` or plain `<g>`) becomes a layer, and drawing outside any group gets its own. Or make one layer per stroke colour. Plot one layer, or all of them with a pause before each layer to swap pens. |
 | **Plot** | Live progress on the preview, with paths done, the current path and time left. Pause, resume, and stop-and-home. Pen up, pen down and motors off for setup. |
 | **Live settings** | Pen heights, pen rates and delays, speeds, acceleration and constant speed change mid-plot. A new pen height is sent at once, so you can dial in pressure mid-stroke. Machine size, resolution, rotation and port stay locked until the plot ends. Changes made while paused apply on resume. |
+| **Drive & calibrate** | Jog the pen in 1–50 mm steps from the start corner (lower it to draw a test line), go back, or set a new start. Find your machine's real reach by driving to the far corner (**Use as far corner**), and check scale by drawing a 100 mm line, measuring it and entering the result, which corrects the steps per inch. |
 | **Remote** | One server, any number of browsers. Every page sees the same plot, progress and settings. An optional bearer token protects the API. |
 
 ## Plotting from LineDream

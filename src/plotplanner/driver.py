@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 from typing import Callable
 
 _VENDOR = os.path.join(os.path.dirname(__file__), "_vendor")
@@ -34,10 +35,15 @@ SETTINGS = {
     "resolution": (int, 1, 2),  # 1 high (16x microstepping), 2 low/faster
     "model": (int, 1, 4),  # 1: 300x218 mm, 2: A3 (430x297 mm), 3: XLX, 4: MiniKit
     "port": (str, None, None),  # serial port; empty for the first plotter found
+    # Calibration overrides; 0 keeps the driver's value for the machine model.
+    "reach_x": (float, 0, 2000),  # mm the carriage can travel in X
+    "reach_y": (float, 0, 2000),  # mm in Y
+    "steps_per_inch": (float, 0, 10000),  # the driver's native_res_factor (iDraw 1270, AxiDraw 1016)
 }
 
 # Settings that can change while a plot runs; the rest change the geometry or the connection.
-LIVE_SETTINGS = frozenset(SETTINGS) - {"auto_rotate", "resolution", "model", "port"}
+LIVE_SETTINGS = frozenset(SETTINGS) - {"auto_rotate", "resolution", "model", "port", "reach_x", "reach_y", "steps_per_inch"}
+TRAVEL_PARAMS = ("default", "V3A3", "V3XLX", "MiniKit")  # the driver's x_travel_* / y_travel_* names
 
 DEFAULT_SETTINGS = {
     "speed_pendown": 25,
@@ -55,6 +61,11 @@ DEFAULT_SETTINGS = {
     # The old PlotPlanner driver allowed 17 x 12 in of travel, so this machine is A3-sized.
     "model": 2,
     "port": "",
+    # iDraw A3 machines are listed at 420 x 297 mm of travel; the driver's A3 model assumes the AxiDraw
+    # A3's 430. Start 10 mm short rather than drive into the end stop; measure with Drive & calibrate.
+    "reach_x": 420.0,
+    "reach_y": 0.0,
+    "steps_per_inch": 0.0,
 }
 
 def machine_travel_mm() -> dict[int, list[float]]:
@@ -67,6 +78,17 @@ def machine_travel_mm() -> dict[int, list[float]]:
         4: (p.x_travel_MiniKit, p.y_travel_MiniKit),
     }
     return {model: [round(x * 25.4), round(y * 25.4)] for model, (x, y) in travel.items()}
+
+
+def default_steps_per_inch() -> float:
+    return float(axidraw.AxiDraw(default_logging=False).params.native_res_factor)
+
+
+def pen_heights_reversed() -> bool:
+    """True when a lower pen position number means a higher pen, as on the iDraw (its own defaults
+    are up 20, down 45; stock AxiDraw's are up 60, down 30)."""
+    p = axidraw.AxiDraw(default_logging=False).params
+    return p.pen_pos_up < p.pen_pos_down
 
 
 MANUAL_COMMANDS = ["raise_pen", "lower_pen", "enable_xy", "disable_xy", "fw_version"]
@@ -105,6 +127,9 @@ class Driver(axidraw.AxiDraw):
         message: Callable[[str], None] = print,
     ):
         super().__init__(default_logging=False, user_message_fun=self._relay)
+        # params is the shared axidraw_conf module; give each driver its own copy so per-plot
+        # overrides (reach, steps per inch) never leak into the next one.
+        self.params = types.SimpleNamespace(**{k: v for k, v in vars(self.params).items() if not k.startswith("__")})
         self.params.check_updates = False
         self._message = message
         self._on_path_start = on_path_start
@@ -112,6 +137,7 @@ class Driver(axidraw.AxiDraw):
         self._pause_requested = pause_requested
         self._take_live_settings = take_live_settings
         self._remote_pause = False
+        self.force_pen = False  # manual raise/lower: move even if the EBB says the pen is already there
         self._entering: str | None = None  # name of the "!" layer being entered
         self.pen_change: str | None = None  # set when the plot stopped for a pen change: the next layer
 
@@ -127,6 +153,15 @@ class Driver(axidraw.AxiDraw):
     def configure(self, svg: str, settings: dict, mode: str = "plot", layer: int | None = None, preview: bool = False):
         self.plot_setup(svg)
         for key, value in clean_settings(settings).items():
+            if key in ("reach_x", "reach_y"):
+                if value > 0:  # every model, so the override holds whichever one is selected
+                    for name in TRAVEL_PARAMS:
+                        setattr(self.params, f"{key[-1]}_travel_{name}", value / 25.4)
+                continue
+            if key == "steps_per_inch":
+                if value > 0:
+                    self.params.native_res_factor = value
+                continue
             if key == "port":
                 value = value or None
             setattr(self.options, key, value)
@@ -143,6 +178,23 @@ class Driver(axidraw.AxiDraw):
         super().plot_path(path, mat_transform)
         if self.plot_current_layer and not self.b_stopped:
             self._on_path_done(path_id)
+
+    def ServoSetupWrapper(self):  # noqa: N802 - overrides the driver's name
+        super().ServoSetupWrapper()
+        if self.options.mode == "manual" and self.force_pen:
+            # The EBB only knows up or down, not at which height; after a height change it would skip
+            # the move. Forget the state so pen_raise()/pen_lower() always go to the set height.
+            self.pen_up = None
+            return
+        if self.options.mode in ("res_plot", "res_home") and not self.options.preview:
+            # Resuming. The driver only trusts the EBB's idea of the pen, and pen_raise() does nothing
+            # in resume mode, so a pen that is physically down here (lowered by hand while paused,
+            # drooped after the servo timed out, or re-heightened) would be dragged along the moves to
+            # come. Physically raise it first, whatever the EBB says.
+            resuming, self.resume_mode = self.resume_mode, False
+            self.pen_up = None
+            self.pen_raise()
+            self.resume_mode = resuming
 
     def DoWePlotLayer(self, str_layer_name):  # noqa: N802 - overrides the driver's name
         # A layer named "!..." makes the driver pause inside this call; remember which one.
