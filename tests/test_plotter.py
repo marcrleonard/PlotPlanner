@@ -325,3 +325,66 @@ def test_back_to_start_while_paused_goes_home_and_keeps_the_plot(fake_ebb, fast,
         p.jog(10, 0)  # jogging would lose resume's place
     p.resume()
     assert p.wait(60) and p.status()["paths_done"] == 4
+
+
+def test_single_layer_progress_counts_only_that_layer(prepared):
+    p = Plotter(preview=True)
+    p.plot(prepared, layer=2)
+    p.wait(30)
+    s = p.status()
+    assert s["paths_total"] == 2 and s["paths_done"] == 2
+    assert s["work_done"] == s["work_total"] > 0
+    assert s["layers_total"] == 1 and s["layer_progress"]["id"] == 2
+
+
+def test_layer_progress_follows_the_layer_being_drawn(fake_ebb, fast, prepared):
+    p = Plotter()
+    p.plot(prepared, pen_changes=True)
+    assert p.wait(60) and p.status()["state"] == PAUSED  # pen change before layer 2
+    s = p.status()
+    assert s["layers_total"] == 2
+    assert s["layer_progress"] == {**s["layer_progress"], "id": 1, "paths_done": 2, "paths_total": 2}
+    paused_elapsed = s["elapsed"]
+    time.sleep(0.5)
+    assert p.status()["elapsed"] == paused_elapsed  # paused time doesn't count
+    p.resume()
+    assert p.wait(30)
+    s = p.status()
+    assert s["layer_progress"]["id"] == 2 and s["layer_progress"]["paths_done"] == 2
+    assert s["layer_progress"]["elapsed"] <= s["elapsed"] - paused_elapsed + 0.2
+    assert s["work_done"] == s["work_total"]
+
+
+def three_layers():
+    paths = "".join(
+        f'<g inkscape:groupmode="layer" inkscape:label="{n} pen{n}">'
+        f'<path id="pp_{2 * n - 1}" d="M{10 * n},10 L{10 * n},40"/><path id="pp_{2 * n}" d="M{10 * n + 5},10 L{10 * n + 5},40"/></g>'
+        for n in (1, 2, 3)
+    )
+    return ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" '
+            f'width="100mm" height="60mm" viewBox="0 0 100 60">{paths}</svg>')
+
+
+def test_chosen_layers_plot_in_succession():
+    p = Plotter(preview=True)
+    p.plot(three_layers(), layers=[3, 1])
+    assert p.wait(30)
+    s = p.status()
+    assert s["completed"] == ["pp_1", "pp_2", "pp_5", "pp_6"] and s["paths_total"] == 4
+    assert s["layers"] == [1, 3] and s["layer"] is None and s["layers_total"] == 2
+    assert 'inkscape:label="2 pen2"' in p.svg  # the preview still has the whole drawing
+
+
+def test_chosen_layers_pause_for_pen_changes_between_them(fake_ebb, fast):
+    p = Plotter()
+    p.plot(three_layers(), layers=[2, 3], pen_changes=True)
+    assert p.wait(60)
+    s = p.status()
+    assert s["state"] == PAUSED and s["pen_change"] == "3 pen3" and s["completed"] == ["pp_3", "pp_4"]
+    p.resume()
+    assert p.wait(60) and p.status()["completed"] == ["pp_3", "pp_4", "pp_5", "pp_6"]
+
+
+def test_unknown_layers_are_refused():
+    with pytest.raises(ValueError):
+        Plotter(preview=True).plot(three_layers(), layers=[7])

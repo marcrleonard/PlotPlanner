@@ -45,3 +45,12 @@ def test_token(tmp_path):
     assert client.get("/api/status").status_code == 401
     assert client.get("/api/status", headers={"Authorization": "Bearer s3cret"}).status_code == 200
     assert client.get("/").status_code == 200  # the page itself is public; it asks for the token
+
+
+def test_plot_chosen_layers(client, sample_svg):
+    optimized = client.post("/api/optimize", json={"svg": sample_svg, "options": {"paper": "a4"}}).get_json()
+    assert client.post("/api/plot", json={"svg": optimized["svg"], "layers": []}).status_code == 400
+    assert client.post("/api/plot", json={"svg": optimized["svg"], "layers": [2]}).status_code == 200
+    client.application.extensions["plotter"].wait(30)
+    assert client.get("/api/status").get_json()["completed"] == ["pp_3", "pp_4"]
+    assert client.get("/api/document").get_json()["layers"] == [2]

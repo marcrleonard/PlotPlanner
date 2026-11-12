@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 
 import vpype as vp
@@ -239,6 +240,18 @@ def add_pen_changes(svg: str) -> str:
     return etree.tostring(root, encoding="unicode")
 
 
+def keep_layers(svg: str, layers: list[int]) -> str:
+    """Only the given numbered layers, in their document order (path ids unchanged). Pen-change
+    layers go too: add_pen_changes puts them back between the layers that are left."""
+    keep = set(layers)
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    for g in list(root.iterfind("svg:g[@inkscape:groupmode='layer']", NSMAP)):
+        number = g.get(f"{{{INKSCAPE_NS}}}label", "").partition(" ")[0]
+        if not (number.isdigit() and int(number) in keep):
+            g.getparent().remove(g)
+    return etree.tostring(root, encoding="unicode")
+
+
 def label_and_number(svg: str, layer_names: dict[int, str] | None = None) -> tuple[str, int]:
     """Give every path a sequential id (pp_1, pp_2, ...) in document order, which is also plot
     order, and name layers "<n> <name>" so the plotter's layer mode can select them.
@@ -316,6 +329,37 @@ AS_IS = OptimizeOptions(paper=None, fit=False, merge=False, sort=False, reloop=F
 
 def is_prepared(svg: str) -> bool:
     return f'id="{PATH_ID_PREFIX}1"' in svg
+
+
+# Rough plotting cost of one pen lift and the travel to the next path, as drawn length (px). It
+# keeps a drawing of many short strokes from looking almost free next to a few long ones.
+PATH_OVERHEAD_PX = 10 * PX_PER_MM
+_NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+
+
+def _drawn_length(d: str) -> float:
+    """Length of a prepared path's outline (absolute M/L points; curves count their control
+    polygon). Used for relative work only, so the units and any group transform don't matter."""
+    numbers = [float(n) for n in _NUMBER.findall(d)]
+    points = list(zip(numbers[0::2], numbers[1::2]))
+    return sum(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5 for (x1, y1), (x2, y2) in zip(points, points[1:]))
+
+
+def path_work(svg: str) -> dict[str, tuple[int | None, float]]:
+    """{path id: (layer number or None, work)} for every numbered path, in plot order. Work is
+    drawn length plus a fixed per-path overhead, for progress and time estimates."""
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    layer_of = {}
+    for g in root.iterfind("svg:g[@inkscape:groupmode='layer']", NSMAP):
+        number = g.get(f"{{{INKSCAPE_NS}}}label", "").partition(" ")[0]
+        for el in g.iter(f"{{{SVG_NS}}}path"):
+            layer_of[el] = int(number) if number.isdigit() else None
+    work = {}
+    for el in root.iter(f"{{{SVG_NS}}}path"):
+        pid = el.get("id", "")
+        if pid.startswith(PATH_ID_PREFIX):
+            work[pid] = (layer_of.get(el), _drawn_length(el.get("d", "")) + PATH_OVERHEAD_PX)
+    return work
 
 
 def list_layers(svg: str) -> list[dict]:

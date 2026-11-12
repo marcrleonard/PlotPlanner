@@ -112,9 +112,19 @@
               <option value="color">Stroke colour</option>
             </select>
           </label>
-          <label>Pen width (mm)
-            <input name="pen_width" type="number" min="0.05" max="3" step="0.05" value="0.35">
-          </label>
+          <div class="pair pen-pair">
+            <label>Pen
+              <select id="pen-preset">
+                <option value="0.2">0.2mm (Micron 005)</option>
+                <option value="0.35">0.35mm (Micron 03)</option>
+                <option value="0.5">0.5mm (Precise V5 Extra Fine)</option>
+                <option value="">Custom</option>
+              </select>
+            </label>
+            <label>Width (mm)
+              <input name="pen_width" type="number" min="0.05" max="3" step="0.05" value="0.35">
+            </label>
+          </div>
           <fieldset>
             <legend>Optimize</legend>
             <label class="check"><input name="merge" type="checkbox" checked> Merge touching lines</label>
@@ -158,14 +168,28 @@
       <section data-panel="plot" hidden>
         <h2>Plot</h2>
         <div class="progress-block">
-          <div class="progress"><div id="progress-bar"></div></div>
-          <div class="progress-text"><span id="progress-count">0 / 0 paths</span><span id="progress-time"></span></div>
+          <div class="progress-row">
+            <div class="progress-head"><span id="progress-name">Whole plot</span><span id="progress-pct"></span></div>
+            <div class="progress"><div id="progress-bar" class="bar"></div></div>
+            <div class="progress-text"><span id="progress-count">0 / 0 paths</span><span id="progress-time"></span></div>
+          </div>
+          <div id="layer-progress" class="progress-row" hidden>
+            <div class="progress-head"><span id="layer-name">Layer</span><span id="layer-pct"></span></div>
+            <div class="progress layer"><div id="layer-bar" class="bar"></div></div>
+            <div class="progress-text"><span id="layer-count"></span><span id="layer-time"></span></div>
+          </div>
           <div id="plot-state" class="state">idle</div>
           <div id="pen-change" class="pen-change" hidden></div>
         </div>
-        <label>Layer
-          <select id="layer"><option value="">All layers</option></select>
-        </label>
+        <fieldset id="layer-pick" class="layer-pick" hidden>
+          <legend>Layers</legend>
+          <div class="layer-head">
+            <span id="layer-summary" class="hint"></span>
+            <span><button type="button" class="link" data-layers="all">All</button><button type="button" class="link" data-layers="none">None</button></span>
+          </div>
+          <div id="layer-list" class="layer-list"></div>
+          <p class="hint">The ticked layers plot one after another. Layers that use the same pen can go in one run.</p>
+        </fieldset>
         <label class="check"><input id="pen-changes" type="checkbox" checked> Pause for a pen change between layers</label>
         <div class="buttons">
           <button id="plot-button" class="primary">Plot</button>

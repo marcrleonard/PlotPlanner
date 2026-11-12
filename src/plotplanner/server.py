@@ -116,7 +116,8 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
     @app.get("/api/document")
     def document():
         """The SVG being plotted, so a client that connects mid-plot can show progress."""
-        return jsonify(svg=plotter.svg, layer=plotter.layer)
+        layers = plotter.layers
+        return jsonify(svg=plotter.svg, layers=layers, layer=layers[0] if layers and len(layers) == 1 else None)
 
     @app.post("/api/optimize")
     def optimize_svg():
@@ -127,10 +128,15 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
     def plot():
         data = body()
         layer = data.get("layer")
+        layers = data.get("layers")
+        if layers is not None and (not isinstance(layers, list) or not layers
+                                   or not all(isinstance(n, int) for n in layers)):
+            raise ValueError("layers must be a non-empty list of layer numbers")
         plotter.plot(
             require_svg(data),
             settings=data.get("settings"),
             layer=int(layer) if layer not in (None, "") else None,
+            layers=layers,
             pen_changes=bool(data.get("pen_changes")),
         )
         if data.get("settings") and settings_file:

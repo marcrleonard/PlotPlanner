@@ -66,9 +66,9 @@ To install the command globally: `uv tool install git+https://github.com/marcrle
 | **Lay out on paper** | Paper presets (A6 to A2, Letter, Legal, Tabloid), a custom size, or the file's own page. Orientation, a position (centre, or anchored a margin in from any edge or corner), and optional scale-to-fit. The preview updates as you change them, shows the drawing's size in mm, and warns when the drawing runs off the paper or past what the machine can reach. |
 | **True-size preview** | Set your pen's width and every stroke is drawn that wide, so you can see where hatching fills in before you ink it. Zoom with − / Fit / 1:1 / +, pinch or ⌘/Ctrl-scroll (around the pointer), and drag to pan; keys `F`, `1`, `+`, `−`. **Calibrate** once with a bank card so 1:1 matches a ruler on your screen. |
 | **Rulers and overlays** | mm or inch rulers along the preview, zeroed at the pen's start corner, with the drawing's extent shaded. Overlay a 4×6, 5×7, A6, A5, A4 or Letter outline from the corner to see what fits. |
-| **Optimize** | vpype's `linemerge`, `linesort` (optionally two-opt), `reloop` and `linesimplify`. Line ends closer than a pen's width (0.35 mm) are joined, which cut a dense hatched card from 5,941 lines to 2,217, each one a pen lift saved. Under **Advanced**, sliders tune the merge gap, simplification and dropping tiny specks, and the line count updates as you move them. You see lines and pen-up travel before and after, and can download the optimized SVG. |
-| **Layers and pens** | Each top-level group (Inkscape layer, LineDream `Group(label=…)` or plain `<g>`) becomes a layer, and drawing outside any group gets its own. Or make one layer per stroke colour. Plot one layer, or all of them with a pause before each layer to swap pens. |
-| **Plot** | Live progress on the preview, with paths done, the current path and time left. Pause, resume, and stop-and-home. Pen up, pen down and motors off for setup. |
+| **Optimize** | vpype's `linemerge`, `linesort` (optionally two-opt), `reloop` and `linesimplify`. Line ends closer than a pen's width (0.35 mm) are joined, which cut a dense hatched card from 5,941 lines to 2,217, each one a pen lift saved. Under **Advanced**, sliders tune the merge gap, simplification and dropping tiny specks, and the line count updates as you move them. You see lines and pen-up travel before and after, and can download the optimized SVG. Pen presets fill in the width, every setting has an ⓘ explaining it, and Prepare and plotter settings are remembered in the browser. |
+| **Layers and pens** | Each top-level group (Inkscape layer, LineDream `Group(label=…)` or plain `<g>`) becomes a layer, and drawing outside any group gets its own. Or make one layer per stroke colour. Tick the layers to plot: one, all, or a few that share a pen in one run, with or without a pause before each layer to swap pens. |
+| **Plot** | Live progress on the preview, with paths done, the current path and time left, for the whole plot and for the layer being drawn (time left is weighted by line length and leaves out pauses). Pause, resume, and stop-and-home. Pen up, pen down and motors off for setup. |
 | **Live settings** | Pen heights, pen rates and delays, speeds, acceleration and constant speed change mid-plot. A new pen height is sent at once, so you can dial in pressure mid-stroke. Machine size, resolution, rotation and port stay locked until the plot ends. Changes made while paused apply on resume. |
 | **Drive & calibrate** | Jog the pen in 1–50 mm steps from the start corner (lower it to draw a test line), go back, or set a new start. Find your machine's real reach by driving to the far corner (**Use as far corner**), and check scale by drawing a 100 mm line, measuring it and entering the result, which corrects the steps per inch. |
 | **Remote** | One server, any number of browsers. Every page sees the same plot, progress and settings. An optional bearer token protects the API. |
@@ -150,6 +150,7 @@ plotplanner optimize card.svg --paper source --merge-gap 0.5 --min-length 0.2 -o
 plotplanner plot drawing.svg --paper a3 --margin 20        # Ctrl-C pauses; again stops and homes
 plotplanner plot drawing.svg --pen-changes --layers-from color
 plotplanner plot drawing.svg --as-is --layer 2
+plotplanner plot drawing.svg --layer 1 --layer 3   # two layers that share a pen, in one run
 
 plotplanner pen up               # also: pen down, motors off, connection, version
 ```
@@ -168,11 +169,11 @@ JSON under `/api`. Send `Authorization: Bearer <token>` when the server has a to
 | Endpoint | |
 |---|---|
 | `GET /info` | Version, paper sizes, defaults, current settings, which settings are live, each machine model's reach. |
-| `GET /status?since=N` | `state` (idle, plotting, paused or stopping), `plot_id`, `paths_done`/`paths_total`, `current_path`, the completed path ids after the first `N`, `pen_change`, settings, messages, error. |
+| `GET /status?since=N` | `state` (idle, plotting, paused or stopping), `plot_id`, `layers`, `paths_done`/`paths_total`, `work_done`/`work_total`, `elapsed` (plotting time, pauses left out), `layer_progress`, `current_path`, the completed path ids after the first `N`, `pen_change`, settings, messages, error. |
 | `GET /connection` | Connected plotters. Lists ports, never opens them. |
 | `GET /document` | The SVG being plotted, so a client that joins late can draw progress. |
 | `POST /optimize` | `{svg, options}` → `{svg, paths, layers, page_mm, bounds_mm, before, after}` |
-| `POST /plot` | `{svg, settings?, layer?, pen_changes?}` |
+| `POST /plot` | `{svg, settings?, layers?, pen_changes?}`: `layers` is a list of layer numbers, plotted in order (all when left out). `layer` (one number) still works. |
 | `POST /pause` · `/resume` · `/stop` | |
 | `POST /manual` | `{command}`: `raise_pen`, `lower_pen`, `enable_xy`, `disable_xy` or `fw_version`. |
 | `GET/POST /settings` | Read or update (live during a plot), or `{reset: true}`. A locked setting during a plot gets 409. |
