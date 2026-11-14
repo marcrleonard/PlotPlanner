@@ -711,7 +711,7 @@ function layoutInfo() {
     const [x, y, w, h] = result.box_mm;
     rows.push(["Page", `${fmtMm([w, h])} at ${Math.round(x)}, ${Math.round(y)} mm`]);
   }
-  if (result.bounds_mm) rows.push(["Lines", fmtMm(result.bounds_mm.slice(2))]);
+  if (result.bounds_mm) rows.push(["Drawing size", fmtMm(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
 
   const warnings = [];
@@ -750,7 +750,7 @@ function previewLayout() {
       if (request !== layoutRequest) return; // a newer change is on its way
       applyPrepared(result, false);
       state.layout = { ...result, options };
-      $("#optimize-stats").hidden = true;
+      showStats(result, false);
       if (state.step === "prepare") showLayout();
     } catch (err) {
       if (request === layoutRequest) toast(err.message, true);
@@ -842,25 +842,43 @@ $("#optimize-form").addEventListener("submit", (e) => {
   layoutRequest++;
   const button = $("#optimize-button");
   button.textContent = "Optimizing…";
+  const request = layoutRequest;
   guarded(async () => {
     const options = optimizeOptions();
+    // Always from the file as loaded, never from an earlier result.
     const result = await api("/optimize", { method: "POST", body: { svg: state.original, options } });
+    if (request !== layoutRequest) return; // a newer optimize or layout change is on its way
     applyPrepared(result, true);
     state.layout = { ...result, options };
     showLayout();
-    const { before: b, after: a } = result;
-    const pct = b.travel_mm ? Math.round((100 * (b.travel_mm - a.travel_mm)) / b.travel_mm) : 0;
-    kv($("#optimize-stats"), [
-      ["Lines (pen lifts)", `${b.paths} → ${a.paths}${b.paths ? ` (−${Math.round((100 * (b.paths - a.paths)) / b.paths)}%)` : ""}`],
-      ["Pen-up travel", `${b.travel_mm} → ${a.travel_mm} mm${pct ? ` (${pct > 0 ? "−" : "+"}${Math.abs(pct)}%)` : ""}`],
-      ["Drawing", `${(a.draw_mm / 1000).toFixed(1)} m`],
-      ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
-    ]);
-  }, button).finally(() => (button.textContent = "Optimize"));
+    showStats(result, true);
+  }, button).finally(() => {
+    if (request === layoutRequest) button.textContent = "Optimize";
+  });
 });
 
+// Line counts for the drawing as loaded (laid out, nothing merged or sorted), and once
+// optimized, what optimizing made of it.
+function showStats(result, optimized) {
+  const { before: b, after: a } = result;
+  const change = (from, to) => {
+    const pct = from ? Math.round((100 * (from - to)) / from) : 0;
+    return pct ? ` (${pct > 0 ? "−" : "+"}${Math.abs(pct)}%)` : "";
+  };
+  kv($("#optimize-stats"), optimized ? [
+    ["Lines (pen lifts)", `${b.paths} → ${a.paths}${change(b.paths, a.paths)}`],
+    ["Pen-up travel", `${b.travel_mm} → ${a.travel_mm} mm${change(b.travel_mm, a.travel_mm)}`],
+    ["Pen-down length", `${(a.draw_mm / 1000).toFixed(1)} m`],
+    ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
+  ] : [
+    ["Lines (pen lifts)", `${b.paths} (not optimized)`],
+    ["Pen-up travel", `${b.travel_mm} mm`],
+    ["Pen-down length", `${(b.draw_mm / 1000).toFixed(1)} m`],
+    ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
+  ]);
+}
+
 $("#revert-button").addEventListener("click", () => {
-  $("#optimize-stats").hidden = true;
   Object.assign(state, { optimized: false });
   previewLayout(); // back to the plain layout, unsorted
   updateControls();
@@ -890,6 +908,7 @@ async function enterPlot() {
   }
   render(state.current, { tracking: true });
   markSkippedLayers(selectedLayers());
+  showProgress(state.status);
 }
 
 async function showServerDocument() {
@@ -915,6 +934,7 @@ function layersChanged() {
   if (state.step === "plot" && (!state.status || state.status.state === "idle") && state.current) {
     render(state.current, { tracking: true });
     markSkippedLayers(selectedLayers());
+    showProgress(state.status);
   }
   updateControls();
 }
@@ -1244,7 +1264,20 @@ function layerLabel(id, name) {
 
 // Progress by work (drawn length plus a per-path overhead), so a few long lines and many short
 // ones both estimate fairly. The rate comes from the whole plot so far, paused time left out.
+// What the progress shows before this page's drawing has been plotted: nothing done yet, out of
+// the paths that will plot (the server's last plot was of something else).
+function notPlotted() {
+  const chosen = selectedLayers();
+  const paths = $$("[id^='pp_']:not(.skipped)", canvas).length;
+  return {
+    state: "idle", paths_total: paths, paths_done: 0, work_total: 0, work_done: 0, elapsed: null,
+    layers: chosen, layer_names: Object.fromEntries(state.layers.map((l) => [l.id, l.name])), layer_progress: null,
+  };
+}
+
 function showProgress(s) {
+  if (!s) return;
+  if (s.state === "idle" && (state.plotId === null || s.plot_id !== state.plotId)) s = notPlotted();
   const running = s.state === "plotting" || s.state === "paused";
   const rate = s.work_done > 0 ? s.elapsed / s.work_done : null;
   const row = (prefix, p, elapsed) => {
