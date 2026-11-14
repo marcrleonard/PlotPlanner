@@ -15,7 +15,9 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 NSMAP = {"svg": SVG_NS, "inkscape": INKSCAPE_NS}
 
 PATH_ID_PREFIX = "pp_"
-PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid"]
+# Named sizes, then common inch sizes (art paper, photo and frame sizes) as "WxHin".
+PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid",
+               "4x6in", "5x7in", "8x10in", "9x12in", "11x14in", "12x16in", "18x24in"]
 ORIENTATIONS = ["auto", "source", "portrait", "landscape"]
 # Where the drawing sits on the sheet. "keep" leaves it where it is relative to the page's top-left
 # corner; the rest anchor it that far in from the edges by the margin.
@@ -80,16 +82,22 @@ def _stats(doc: vp.Document) -> dict:
 
 
 def _paper_size(paper: str) -> tuple[float, float]:
-    """Paper size in px, portrait."""
+    """Paper size in px, portrait. A name, or "WxHmm" / "WxHin"."""
     paper = paper.strip().lower()
     if paper in vp.PAGE_SIZES:
         w, h = vp.PAGE_SIZES[paper]
     else:
+        per = 25.4 * PX_PER_MM if paper.endswith("in") else PX_PER_MM
         try:
-            w, h = (float(v) * PX_PER_MM for v in paper.removesuffix("mm").split("x"))
+            w, h = (float(v) * per for v in paper.removesuffix("in").removesuffix("mm").split("x"))
         except ValueError:
-            raise ValueError(f"unknown paper size {paper!r}; use {PAPER_SIZES} or WxH in mm") from None
+            raise ValueError(f"unknown paper size {paper!r}; use {PAPER_SIZES}, WxHmm or WxHin") from None
     return min(w, h), max(w, h)
+
+
+def paper_sizes_mm() -> dict[str, list[float]]:
+    """Each named paper size, portrait, in mm."""
+    return {name: [round(v / PX_PER_MM, 1) for v in _paper_size(name)] for name in PAPER_SIZES}
 
 
 def _arrange(opts: OptimizeOptions, doc: vp.Document) -> list[float] | None:

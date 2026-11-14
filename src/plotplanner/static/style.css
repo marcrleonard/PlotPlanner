@@ -380,3 +380,11 @@ label.check + .tip-text { margin: 2px 0 0 24px; }
 .layer-head button.link { border: 0; background: none; padding: 0 0 0 10px; color: var(--accent); font-size: 13px; text-decoration: underline; }
 .layer-list { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; }
 .layer-list label.check { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 400; margin: 0; padding: 3px 0; }
+
+/* ---------------------------------------------------------------- units */
+
+.units { margin-left: auto; display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
+.units button { border: 0; border-radius: 0; padding: 3px 10px; font-size: 13px; color: var(--muted); background: none; }
+.units button.active { background: var(--accent); color: var(--accent-ink); }
+.units + .server { margin-left: 0; }
+@media (max-width: 760px) { .units { margin-left: 0; } }

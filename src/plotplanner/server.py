@@ -91,6 +91,7 @@ def create_app(plotter: Plotter | None = None, token: str | None = None, setting
             version=__version__,
             preview=plotter.preview,
             paper_sizes=optimize.PAPER_SIZES,
+            paper_sizes_mm=optimize.paper_sizes_mm(),
             orientations=optimize.ORIENTATIONS,
             positions=optimize.POSITIONS,
             layer_sources=optimize.LAYER_SOURCES,

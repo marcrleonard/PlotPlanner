@@ -186,3 +186,10 @@ def test_percent_layers_are_never_plotted():
     for layers_from in ("groups", "color"):
         result = optimize.optimize(svg, {**optimize.AS_IS.__dict__, "layers_from": layers_from})
         assert result["paths"] == 1 and len(result["layers"]) == 1
+
+
+def test_inch_paper_sizes(sample_svg):
+    sizes = optimize.paper_sizes_mm()
+    assert sizes["9x12in"] == [228.6, 304.8] and sizes["a4"] == [210.0, 297.0]
+    result = optimize.optimize(sample_svg, {"paper": "5x7in", "orientation": "portrait"})
+    assert result["page_mm"] == [127.0, 177.8]

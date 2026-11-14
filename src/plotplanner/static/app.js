@@ -33,6 +33,128 @@ const state = {
   currentEl: null,
 };
 
+
+// ------------------------------------------------------------------ units
+
+// Lengths are millimetres everywhere inside (and on the server); they are shown and typed in the
+// unit chosen in the header. Pen widths and the optimize tolerances stay in mm, as pens are sold.
+const MM_PER_UNIT = { mm: 1, in: 25.4 };
+let unit = ["mm", "in"].includes(store.get("pp.unit")) ? store.get("pp.unit")
+  : store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
+
+function toUnit(mm) {
+  return mm / MM_PER_UNIT[unit];
+}
+// A length as a number in the current unit: whole mm, inches to 0.01 (or `places`).
+function numIn(mm, places = unit === "in" ? 2 : 0) {
+  const f = 10 ** places;
+  return String(Math.round(toUnit(mm) * f) / f);
+}
+function fmtLen(mm, places) {
+  return `${numIn(mm, places)} ${unit}`;
+}
+function fmtSize([w, h]) {
+  return `${numIn(w)} × ${numIn(h)} ${unit}`;
+}
+// Long distances (pen travel): mm or metres, feet in inches.
+function fmtDistance(mm, metres = false) {
+  if (unit === "in") return `${(mm / 304.8).toFixed(1)} ft`;
+  return metres ? `${(mm / 1000).toFixed(1)} m` : `${Math.round(mm)} mm`;
+}
+
+// Length fields (data-len) show the current unit. Each remembers the mm it was set to, so
+// switching units back and forth never drifts.
+function lenText(mm) {
+  return mm == null || mm === "" ? "" : numIn(Number(mm), unit === "in" ? 2 : 1);
+}
+function setLen(input, mm) {
+  const text = lenText(mm);
+  input.value = text;
+  input.dataset.mm = mm ?? "";
+  input.dataset.shown = text;
+}
+function lenMm(input) {
+  const value = input.value.trim();
+  if (value === "") return null;
+  if (value === input.dataset.shown && input.dataset.mm !== "") return Number(input.dataset.mm);
+  return Number(value) * MM_PER_UNIT[unit];
+}
+
+for (const input of $$("[data-len]")) {
+  input.dataset.minMm = input.min;
+  input.dataset.stepMm = input.step;
+  setLen(input, input.value === "" ? null : Number(input.value)); // the page's defaults are in mm
+}
+
+const JOG_STEPS = {
+  mm: [[1, "1 mm"], [5, "5 mm"], [10, "10 mm"], [50, "50 mm"]],
+  in: [[25.4 / 16, "1/16 in"], [6.35, "1/4 in"], [25.4, "1 in"], [50.8, "2 in"]],
+};
+const SCALE_LINE_MM = { mm: 100, in: 101.6 }; // the Check scale line: 100 mm or 4 in
+
+function paperBase(name) {
+  if (name === "custom") return "Custom";
+  if (name === "source") return "Source page";
+  const inch = /^([\d.]+)x([\d.]+)in$/.exec(name);
+  if (inch) return `${inch[1]} × ${inch[2]} in`;
+  return name.length <= 3 ? name.toUpperCase() : name[0].toUpperCase() + name.slice(1);
+}
+
+function paperLabel(name) {
+  const size = state.info?.paper_sizes_mm?.[name];
+  const base = paperBase(name);
+  if (!size || (unit === "in" && name.endsWith("in"))) return base;
+  return `${base} (${fmtSize(size)})`;
+}
+
+function setUnit(next) {
+  if (next === unit) return;
+  const fields = $$("[data-len]").map((el) => [el, lenMm(el)]);
+  unit = next;
+  store.set("pp.unit", unit);
+  store.set("pp.rulerUnit", unit);
+  for (const [el, mm] of fields) setLen(el, mm);
+  applyUnit();
+}
+
+// Every unit label, step and readout, for the current unit.
+function applyUnit() {
+  for (const b of $$("[data-unit]")) {
+    b.classList.toggle("active", b.dataset.unit === unit);
+    b.setAttribute("aria-pressed", String(b.dataset.unit === unit));
+  }
+  $("#ruler-unit").textContent = unit;
+  for (const el of $$("[data-len]")) {
+    el.step = unit === "in" ? "0.01" : el.dataset.stepMm;
+    if (el.dataset.minMm !== "") el.min = String(Math.floor(toUnit(Number(el.dataset.minMm)) * 100) / 100);
+    const label = el.closest("label");
+    const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (/\((mm|in)\)/.test(node.textContent)) node.textContent = node.textContent.replace(/\((mm|in)\)/, `(${unit})`);
+    }
+  }
+  const jog = $("#jog-step");
+  const index = Math.max(0, jog.selectedIndex);
+  jog.replaceChildren(...JOG_STEPS[unit].map(([mm, text]) => new Option(text, mm)));
+  jog.selectedIndex = index;
+  const line = unit === "in" ? "4 in" : "100 mm";
+  $("#scale-draw").textContent = `Draw ${line} line`;
+  $("#scale-hint").textContent = `Draws a ${line} line along X from here. Measure it with a ruler and enter what you get.`;
+  for (const option of $("#paper").options) option.textContent = paperLabel(option.value);
+  const travel = state.info?.machine_travel_mm ?? {};
+  for (const option of $$("#settings-form [name=model] option")) {
+    if (travel[option.value]) option.textContent = option.dataset.label.replace("{size}", fmtSize(travel[option.value]));
+  }
+  if (state.info) overridePlaceholders();
+  layoutInfo();
+  if (state.lastStats) showStats(...state.lastStats);
+  drawRulers();
+  if (state.status) applyStatus(state.status);
+}
+
+$$("[data-unit]").forEach((b) => b.addEventListener("click", () => setUnit(b.dataset.unit)));
+
 // ------------------------------------------------------------------ api
 
 async function api(path, { method = "GET", body } = {}) {
@@ -227,17 +349,10 @@ const RULER_STEPS = {
   mm: { perMm: 1, steps: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500] },
   in: { perMm: 1 / 25.4, steps: [1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 5, 10, 20] },
 };
-let rulerUnit = store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
-$("#ruler-unit").textContent = rulerUnit;
-$("#ruler-unit").addEventListener("click", () => {
-  rulerUnit = rulerUnit === "mm" ? "in" : "mm";
-  store.set("pp.rulerUnit", rulerUnit);
-  $("#ruler-unit").textContent = rulerUnit;
-  drawRulers();
-});
+$("#ruler-unit").addEventListener("click", () => setUnit(unit === "mm" ? "in" : "mm"));
 
 function fmtRuler(value) {
-  if (rulerUnit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+  if (unit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
   return String(Math.round(value * 1000) / 1000).replace(/^0\./, ".");
 }
 
@@ -251,7 +366,7 @@ function drawRuler(el, horizontal, originPx, extent) {
   const css = getComputedStyle(document.documentElement);
   const length = horizontal ? width : height;
   const thick = horizontal ? height : width;
-  const { perMm, steps } = RULER_STEPS[rulerUnit];
+  const { perMm, steps } = RULER_STEPS[unit];
   const pxPerUnit = view.scale / perMm;
   const label = steps.find((s) => s * pxPerUnit >= 48) ?? steps.at(-1);
   const minor = steps.find((s) => s * pxPerUnit >= 6 && s <= label) ?? label;
@@ -496,7 +611,7 @@ window.addEventListener("drop", (e) => {
 function paperValue() {
   const f = $("#optimize-form");
   if (f.paper.value === "source") return null;
-  if (f.paper.value === "custom") return `${Number(f.paper_w.value) || 0}x${Number(f.paper_h.value) || 0}mm`;
+  if (f.paper.value === "custom") return `${lenMm(f.paper_w) || 0}x${lenMm(f.paper_h) || 0}mm`;
   return f.paper.value;
 }
 
@@ -515,8 +630,8 @@ function machineReach() {
 function overridePlaceholders() {
   const f = settingsForm.elements;
   const model = state.info?.machine_travel_mm?.[f.model.value] ?? [];
-  f.reach_x.placeholder = model[0] ? `${model[0]} (machine size)` : "machine size";
-  f.reach_y.placeholder = model[1] ? `${model[1]} (machine size)` : "machine size";
+  f.reach_x.placeholder = model[0] ? `${numIn(model[0])} (machine size)` : "machine size";
+  f.reach_y.placeholder = model[1] ? `${numIn(model[1])} (machine size)` : "machine size";
   f.steps_per_inch.placeholder = `${state.info?.default_steps_per_inch ?? ""} (driver)`;
 }
 
@@ -527,16 +642,16 @@ function placementOptions() {
     return {
       paper: `${w}x${h}mm`,
       orientation: "landscape",
-      margin: Number(f.quick_offset.value) || 0,
+      margin: lenMm(f.quick_offset) || 0,
       fit: false,
       position: "top-left",
-      width: f.size_mode.value === "width" ? Number(f.quick_width.value) || null : null,
+      width: f.size_mode.value === "width" ? lenMm(f.quick_width) || null : null,
     };
   }
   return {
     paper: paperValue(),
     orientation: f.orientation.value,
-    margin: Number(f.margin.value) || 0,
+    margin: lenMm(f.margin) || 0,
     fit: f.fit.checked,
     position: f.position.value,
     width: null,
@@ -659,7 +774,7 @@ function showMode() {
     if (e.target.name === "size_mode" && f.size_mode.value === "width") {
       // Start from the current width of whatever sizing is measured by.
       const width = f.reference.value === "page" && state.docPageMm ? state.docPageMm[0] : state.layout?.bounds_mm?.[2];
-      if (width) f.quick_width.value = Math.round(width);
+      if (width) setLen(f.quick_width, Math.round(width));
     }
     if (e.target.name === "mode" || e.target.name === "size_mode") showMode();
   });
@@ -692,9 +807,6 @@ function showLayout() {
   drawRulers();
 }
 
-function fmtMm([w, h]) {
-  return `${Math.round(w)} × ${Math.round(h)} mm`;
-}
 
 function layoutInfo() {
   const result = state.layout;
@@ -705,13 +817,13 @@ function layoutInfo() {
   const [pw, ph] = result.page_mm;
   const orientation = pw > ph ? "landscape" : pw < ph ? "portrait" : "square";
   const paperName = prepareMode() === "quick" ? "Plotter reach"
-    : result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
-  const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
+    : result.options.paper ? paperBase($("#paper").value) : "Source page";
+  const rows = [["Paper", `${paperName} ${orientation} · ${fmtSize(result.page_mm)}`]];
   if (result.options.reference === "page" && result.box_mm) {
     const [x, y, w, h] = result.box_mm;
-    rows.push(["Page", `${fmtMm([w, h])} at ${Math.round(x)}, ${Math.round(y)} mm`]);
+    rows.push(["Page", `${fmtSize([w, h])} at ${numIn(x)}, ${numIn(y)} ${unit}`]);
   }
-  if (result.bounds_mm) rows.push(["Drawing size", fmtMm(result.bounds_mm.slice(2))]);
+  if (result.bounds_mm) rows.push(["Drawing size", fmtSize(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
 
   const warnings = [];
@@ -726,7 +838,7 @@ function layoutInfo() {
     // the long axis when auto-rotate is on: machine x = page y, machine y = page width - page x.
     const far = settings.auto_rotate && ph > pw ? [b[1] + b[3], pw - b[0]] : [b[0] + b[2], b[1] + b[3]];
     if (far[0] > reach[0] + 0.5 || far[1] > reach[1] + 0.5) {
-      warnings.push(`The drawing goes past what the plotter reaches (${fmtMm(reach)} from the home corner, ` +
+      warnings.push(`The drawing goes past what the plotter reaches (${fmtSize(reach)} from the home corner, ` +
         "the Machine size setting). The part beyond that is clipped.");
     }
   }
@@ -787,7 +899,8 @@ function saveOptimize() {
     if (!el.name) continue;
     if (el.type === "radio") {
       if (el.checked) out[el.name] = el.value;
-    } else out[el.name] = el.type === "checkbox" ? el.checked : el.value;
+    } else if (el.dataset.len !== undefined) out[el.name] = lenMm(el) ?? "";
+    else out[el.name] = el.type === "checkbox" ? el.checked : el.value;
   }
   for (const name of ADVANCED) if (f[name].dataset.auto) out[name] = "auto";
   store.set(OPTIMIZE_KEY, JSON.stringify(out));
@@ -814,7 +927,8 @@ function restoreOptimize(names) {
     else if (ADVANCED.includes(name)) {
       if (saved[name] !== "auto") field.value = saved[name];
       showAdvancedValue(field);
-    } else field.value = saved[name];
+    } else if (field.dataset.len !== undefined) setLen(field, saved[name] === "" ? null : Number(saved[name]));
+    else field.value = saved[name];
   }
 }
 
@@ -860,6 +974,7 @@ $("#optimize-form").addEventListener("submit", (e) => {
 // Line counts for the drawing as loaded (laid out, nothing merged or sorted), and once
 // optimized, what optimizing made of it.
 function showStats(result, optimized) {
+  state.lastStats = [result, optimized];
   const { before: b, after: a } = result;
   const change = (from, to) => {
     const pct = from ? Math.round((100 * (from - to)) / from) : 0;
@@ -867,13 +982,13 @@ function showStats(result, optimized) {
   };
   kv($("#optimize-stats"), optimized ? [
     ["Lines (pen lifts)", `${b.paths} → ${a.paths}${change(b.paths, a.paths)}`],
-    ["Pen-up travel", `${b.travel_mm} → ${a.travel_mm} mm${change(b.travel_mm, a.travel_mm)}`],
-    ["Pen-down length", `${(a.draw_mm / 1000).toFixed(1)} m`],
+    ["Pen-up travel", `${fmtDistance(b.travel_mm)} → ${fmtDistance(a.travel_mm)}${change(b.travel_mm, a.travel_mm)}`],
+    ["Pen-down length", fmtDistance(a.draw_mm, true)],
     ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
   ] : [
     ["Lines (pen lifts)", `${b.paths} (not optimized)`],
-    ["Pen-up travel", `${b.travel_mm} mm`],
-    ["Pen-down length", `${(b.draw_mm / 1000).toFixed(1)} m`],
+    ["Pen-up travel", fmtDistance(b.travel_mm)],
+    ["Pen-down length", fmtDistance(b.draw_mm, true)],
     ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
   ]);
 }
@@ -999,30 +1114,33 @@ $("#jog-set").addEventListener("click", (e) => drive({ action: "set_start" }, e.
 $("#jog-reach").addEventListener("click", (e) => {
   const at = state.status?.jog;
   if (!at || !(at[0] > 0 && at[1] > 0)) return toast("Drive to the far corner first (both X and Y away from the start).", true);
-  if (!confirm(`Save ${at[0]} × ${at[1]} mm as the furthest the plotter can reach?`)) return;
+  if (!confirm(`Save ${fmtSize(at)} as the furthest the plotter can reach?`)) return;
   guarded(async () => {
     fillSettings(await api("/settings", { method: "POST", body: { reach_x: at[0], reach_y: at[1] } }));
-    toast(`Reach set to ${at[0]} × ${at[1]} mm.`);
+    toast(`Reach set to ${fmtSize(at)}.`);
     if (prepareMode() === "quick") previewLayout();
   }, e.currentTarget);
 });
 
 $("#scale-draw").addEventListener("click", (e) =>
   guarded(async () => {
+    const line = SCALE_LINE_MM[unit];
     await api("/manual", { method: "POST", body: { command: "lower_pen" } });
-    await api("/jog", { method: "POST", body: { dx: 100, dy: 0 } });
+    await api("/jog", { method: "POST", body: { dx: line, dy: 0 } });
     await api("/manual", { method: "POST", body: { command: "raise_pen" } });
-    toast("Drew a 100 mm line. Measure it and enter the length.");
+    state.scaleLineMm = line;
+    toast(`Drew a ${fmtLen(line, unit === "in" ? 0 : 0)} line. Measure it and enter the length.`);
     poll();
   }, e.currentTarget),
 );
 
 $("#scale-apply").addEventListener("click", (e) => {
-  const measured = Number($("#scale-measured").value);
-  if (!(measured > 10)) return toast("Enter the measured length of the 100 mm line, in mm.", true);
+  const line = state.scaleLineMm ?? SCALE_LINE_MM[unit];
+  const measured = lenMm($("#scale-measured"));
+  if (!(measured > line / 4)) return toast(`Enter the measured length of the ${fmtLen(line, 0)} line, in ${unit}.`, true);
   const settings = state.status?.settings ?? state.info.settings;
   const current = settings.steps_per_inch || state.info.default_steps_per_inch;
-  const corrected = Math.round(((current * 100) / measured) * 10) / 10;
+  const corrected = Math.round(((current * line) / measured) * 10) / 10;
   guarded(async () => {
     fillSettings(await api("/settings", { method: "POST", body: { steps_per_inch: corrected } }));
     $("#scale-info").textContent = `Steps per inch ${current} → ${corrected}. Draw another line to check.`;
@@ -1100,6 +1218,10 @@ function fillSettings(settings) {
     const input = settingsForm.elements[key];
     if (!input || input === document.activeElement) continue;
     // Calibration overrides of 0 mean "use the default": show them blank, with the default as placeholder.
+    if (input.dataset.len !== undefined) {
+      if (lenText(raw || null) !== input.value) setLen(input, raw || null);
+      continue;
+    }
     const value = OVERRIDES.includes(key) && !raw ? "" : penHeight(key, raw);
     if (input.type === "checkbox") input.checked = Boolean(value);
     else if (String(input.value) !== String(value)) input.value = value;
@@ -1112,6 +1234,7 @@ function fillSettings(settings) {
 function settingValue(input) {
   if (input.type === "checkbox") return input.checked;
   if (input.type === "text") return input.value;
+  if (input.dataset.len !== undefined) return lenMm(input) ?? 0;
   return penHeight(input.name, Number(input.value)); // mirrored back for the plotter
 }
 
@@ -1176,7 +1299,7 @@ const TIPS = {
   reference: "What gets sized and placed. The file's page moves the whole page (blank padding and all), " +
     "so the drawing keeps its place on it. The lines only uses the outline of the drawing itself.",
   size_mode: "As drawn keeps the size in the file. Set width scales it to the width you give, keeping its proportions.",
-  quick_width: "How wide the page or the lines (whichever you size by) end up, in mm.",
+  quick_width: "How wide the page or the lines (whichever you size by) end up.",
   quick_offset: "Gap from the plotter's start corner to the drawing, on both the top and left edges.",
   paper: "The sheet you're plotting on. Keep source page uses the page size in the file.",
   orientation: "Follow the drawing turns the sheet to match the drawing's shape. Follow the source page matches the file's page.",
@@ -1213,7 +1336,7 @@ const TIPS = {
   model: "Which machine you have. It sets how far the plotter can reach (unless you set Reach below).",
   reach_x: "How far the plotter can travel left to right from the start corner. Blank uses the machine size.",
   reach_y: "How far the plotter can travel top to bottom from the start corner. Blank uses the machine size.",
-  steps_per_inch: "Motor steps per inch of travel. Correct it with Check scale if a 100 mm line comes out a different length.",
+  steps_per_inch: "Motor steps per inch of travel. Correct it with Check scale if the test line comes out a different length.",
   resolution: "High is smoother and more precise. Low moves faster.",
   const_speed: "Draw at one steady speed instead of speeding up on straight runs. Can look more even with some pens.",
   auto_rotate: "Plot portrait pages turned sideways, so they run along the plotter's longer axis.",
@@ -1310,7 +1433,8 @@ function applyStatus(s) {
   label.className = `state ${s.state}`;
   const jog = s.jog;
   $("#drive-pos").textContent = !jog ? "Position unknown (motors were off): move it to the start and Set start here"
-    : jog[0] || jog[1] ? `X ${jog[0]} mm, Y ${jog[1]} mm from the start corner` : "At the start corner";
+    : jog[0] || jog[1] ? `X ${fmtLen(jog[0], unit === "in" ? 2 : 1)}, Y ${fmtLen(jog[1], unit === "in" ? 2 : 1)} from the start corner`
+      : "At the start corner";
   const penChange = $("#pen-change");
   penChange.hidden = !(s.state === "paused" && s.pen_change);
   if (!penChange.hidden) {
@@ -1445,7 +1569,7 @@ async function connect() {
   const paper = $("#paper");
   const selected = paper.value;
   paper.replaceChildren(
-    ...state.info.paper_sizes.map((p) => new Option(p.toUpperCase(), p)),
+    ...state.info.paper_sizes.map((p) => new Option(paperLabel(p), p)),
     new Option("Custom…", "custom"),
     new Option("Keep source page", "source"),
   );
@@ -1455,7 +1579,9 @@ async function connect() {
   overridePlaceholders();
   resetAdvanced();
   restoreOptimize(ADVANCED);
+  applyUnit();
   poll();
 }
 
+applyUnit();
 connect();
