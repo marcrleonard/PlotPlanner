@@ -33,6 +33,128 @@ const state = {
   currentEl: null,
 };
 
+
+// ------------------------------------------------------------------ units
+
+// Lengths are millimetres everywhere inside (and on the server); they are shown and typed in the
+// unit chosen in the header. Pen widths and the optimize tolerances stay in mm, as pens are sold.
+const MM_PER_UNIT = { mm: 1, in: 25.4 };
+let unit = ["mm", "in"].includes(store.get("pp.unit")) ? store.get("pp.unit")
+  : store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
+
+function toUnit(mm) {
+  return mm / MM_PER_UNIT[unit];
+}
+// A length as a number in the current unit: whole mm, inches to 0.01 (or `places`).
+function numIn(mm, places = unit === "in" ? 2 : 0) {
+  const f = 10 ** places;
+  return String(Math.round(toUnit(mm) * f) / f);
+}
+function fmtLen(mm, places) {
+  return `${numIn(mm, places)} ${unit}`;
+}
+function fmtSize([w, h]) {
+  return `${numIn(w)} × ${numIn(h)} ${unit}`;
+}
+// Long distances (pen travel): mm or metres, feet in inches.
+function fmtDistance(mm, metres = false) {
+  if (unit === "in") return `${(mm / 304.8).toFixed(1)} ft`;
+  return metres ? `${(mm / 1000).toFixed(1)} m` : `${Math.round(mm)} mm`;
+}
+
+// Length fields (data-len) show the current unit. Each remembers the mm it was set to, so
+// switching units back and forth never drifts.
+function lenText(mm) {
+  return mm == null || mm === "" ? "" : numIn(Number(mm), unit === "in" ? 2 : 1);
+}
+function setLen(input, mm) {
+  const text = lenText(mm);
+  input.value = text;
+  input.dataset.mm = mm ?? "";
+  input.dataset.shown = text;
+}
+function lenMm(input) {
+  const value = input.value.trim();
+  if (value === "") return null;
+  if (value === input.dataset.shown && input.dataset.mm !== "") return Number(input.dataset.mm);
+  return Number(value) * MM_PER_UNIT[unit];
+}
+
+for (const input of $$("[data-len]")) {
+  input.dataset.minMm = input.min;
+  input.dataset.stepMm = input.step;
+  setLen(input, input.value === "" ? null : Number(input.value)); // the page's defaults are in mm
+}
+
+const JOG_STEPS = {
+  mm: [[1, "1 mm"], [5, "5 mm"], [10, "10 mm"], [50, "50 mm"]],
+  in: [[25.4 / 16, "1/16 in"], [6.35, "1/4 in"], [25.4, "1 in"], [50.8, "2 in"]],
+};
+const SCALE_LINE_MM = { mm: 100, in: 101.6 }; // the Check scale line: 100 mm or 4 in
+
+function paperBase(name) {
+  if (name === "custom") return "Custom";
+  if (name === "source") return "Source page";
+  const inch = /^([\d.]+)x([\d.]+)in$/.exec(name);
+  if (inch) return `${inch[1]} × ${inch[2]} in`;
+  return name.length <= 3 ? name.toUpperCase() : name[0].toUpperCase() + name.slice(1);
+}
+
+function paperLabel(name) {
+  const size = state.info?.paper_sizes_mm?.[name];
+  const base = paperBase(name);
+  if (!size || (unit === "in" && name.endsWith("in"))) return base;
+  return `${base} (${fmtSize(size)})`;
+}
+
+function setUnit(next) {
+  if (next === unit) return;
+  const fields = $$("[data-len]").map((el) => [el, lenMm(el)]);
+  unit = next;
+  store.set("pp.unit", unit);
+  store.set("pp.rulerUnit", unit);
+  for (const [el, mm] of fields) setLen(el, mm);
+  applyUnit();
+}
+
+// Every unit label, step and readout, for the current unit.
+function applyUnit() {
+  for (const b of $$("[data-unit]")) {
+    b.classList.toggle("active", b.dataset.unit === unit);
+    b.setAttribute("aria-pressed", String(b.dataset.unit === unit));
+  }
+  $("#ruler-unit").textContent = unit;
+  for (const el of $$("[data-len]")) {
+    el.step = unit === "in" ? "0.01" : el.dataset.stepMm;
+    if (el.dataset.minMm !== "") el.min = String(Math.floor(toUnit(Number(el.dataset.minMm)) * 100) / 100);
+    const label = el.closest("label");
+    const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (/\((mm|in)\)/.test(node.textContent)) node.textContent = node.textContent.replace(/\((mm|in)\)/, `(${unit})`);
+    }
+  }
+  const jog = $("#jog-step");
+  const index = Math.max(0, jog.selectedIndex);
+  jog.replaceChildren(...JOG_STEPS[unit].map(([mm, text]) => new Option(text, mm)));
+  jog.selectedIndex = index;
+  const line = unit === "in" ? "4 in" : "100 mm";
+  $("#scale-draw").textContent = `Draw ${line} line`;
+  $("#scale-hint").textContent = `Draws a ${line} line along X from here. Measure it with a ruler and enter what you get.`;
+  for (const option of $("#paper").options) option.textContent = paperLabel(option.value);
+  const travel = state.info?.machine_travel_mm ?? {};
+  for (const option of $$("#settings-form [name=model] option")) {
+    if (travel[option.value]) option.textContent = option.dataset.label.replace("{size}", fmtSize(travel[option.value]));
+  }
+  if (state.info) overridePlaceholders();
+  layoutInfo();
+  if (state.lastStats) showStats(...state.lastStats);
+  drawRulers();
+  if (state.status) applyStatus(state.status);
+}
+
+$$("[data-unit]").forEach((b) => b.addEventListener("click", () => setUnit(b.dataset.unit)));
+
 // ------------------------------------------------------------------ api
 
 async function api(path, { method = "GET", body } = {}) {
@@ -227,17 +349,10 @@ const RULER_STEPS = {
   mm: { perMm: 1, steps: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500] },
   in: { perMm: 1 / 25.4, steps: [1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 5, 10, 20] },
 };
-let rulerUnit = store.get("pp.rulerUnit", "mm") === "in" ? "in" : "mm";
-$("#ruler-unit").textContent = rulerUnit;
-$("#ruler-unit").addEventListener("click", () => {
-  rulerUnit = rulerUnit === "mm" ? "in" : "mm";
-  store.set("pp.rulerUnit", rulerUnit);
-  $("#ruler-unit").textContent = rulerUnit;
-  drawRulers();
-});
+$("#ruler-unit").addEventListener("click", () => setUnit(unit === "mm" ? "in" : "mm"));
 
 function fmtRuler(value) {
-  if (rulerUnit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+  if (unit === "mm" || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
   return String(Math.round(value * 1000) / 1000).replace(/^0\./, ".");
 }
 
@@ -251,7 +366,7 @@ function drawRuler(el, horizontal, originPx, extent) {
   const css = getComputedStyle(document.documentElement);
   const length = horizontal ? width : height;
   const thick = horizontal ? height : width;
-  const { perMm, steps } = RULER_STEPS[rulerUnit];
+  const { perMm, steps } = RULER_STEPS[unit];
   const pxPerUnit = view.scale / perMm;
   const label = steps.find((s) => s * pxPerUnit >= 48) ?? steps.at(-1);
   const minor = steps.find((s) => s * pxPerUnit >= 6 && s <= label) ?? label;
@@ -366,8 +481,22 @@ function penWidth() {
   input.value = store.get("pp.penWidth", input.value);
   input.addEventListener("input", () => {
     store.set("pp.penWidth", input.value);
+    syncPenPreset();
     view.apply();
   });
+  // A preset just fills in the width; any other width shows as Custom.
+  $("#pen-preset").addEventListener("change", (e) => {
+    if (!e.target.value) return input.focus();
+    input.value = e.target.value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function syncPenPreset() {
+  const width = Number($("#optimize-form").pen_width.value);
+  const preset = [...$("#pen-preset").options].find((o) => o.value && Math.abs(Number(o.value) - width) < 1e-6);
+  $("#pen-preset").value = preset ? preset.value : "";
 }
 
 function describe(svgText) {
@@ -429,7 +558,7 @@ function loadText(text, name) {
   // A file with a real size (mm, cm, in, ...) is already laid out: keep it as it is. Unitless
   // (pixel) files have no size to keep, so they default to the paper presets.
   const paper = $("#paper");
-  paper.value = d.physical ? "source" : state.info?.optimize_defaults.paper ?? "a3";
+  paper.value = d.physical ? "source" : savedPaper() ?? state.info?.optimize_defaults.paper ?? "a3";
   // A file with a real size plots at that size; a unitless one has no size to keep, so it is
   // scaled to the margins instead.
   $("#optimize-form").fit.checked = !d.physical;
@@ -442,7 +571,7 @@ function loadText(text, name) {
   reference.options[0].textContent = d.physical
     ? `The file's page (${d.width} × ${d.height})` : "The file's page";
   showMode();
-  $("#custom-size").hidden = true;
+  $("#custom-size").hidden = paper.value !== "custom";
   $("#layout-info").hidden = $("#layout-warnings").hidden = true; // the new file's layout is on its way
   kv($("#doc-info"), [
     ["File", name],
@@ -482,7 +611,7 @@ window.addEventListener("drop", (e) => {
 function paperValue() {
   const f = $("#optimize-form");
   if (f.paper.value === "source") return null;
-  if (f.paper.value === "custom") return `${Number(f.paper_w.value) || 0}x${Number(f.paper_h.value) || 0}mm`;
+  if (f.paper.value === "custom") return `${lenMm(f.paper_w) || 0}x${lenMm(f.paper_h) || 0}mm`;
   return f.paper.value;
 }
 
@@ -501,8 +630,8 @@ function machineReach() {
 function overridePlaceholders() {
   const f = settingsForm.elements;
   const model = state.info?.machine_travel_mm?.[f.model.value] ?? [];
-  f.reach_x.placeholder = model[0] ? `${model[0]} (machine size)` : "machine size";
-  f.reach_y.placeholder = model[1] ? `${model[1]} (machine size)` : "machine size";
+  f.reach_x.placeholder = model[0] ? `${numIn(model[0])} (machine size)` : "machine size";
+  f.reach_y.placeholder = model[1] ? `${numIn(model[1])} (machine size)` : "machine size";
   f.steps_per_inch.placeholder = `${state.info?.default_steps_per_inch ?? ""} (driver)`;
 }
 
@@ -513,16 +642,16 @@ function placementOptions() {
     return {
       paper: `${w}x${h}mm`,
       orientation: "landscape",
-      margin: Number(f.quick_offset.value) || 0,
+      margin: lenMm(f.quick_offset) || 0,
       fit: false,
       position: "top-left",
-      width: f.size_mode.value === "width" ? Number(f.quick_width.value) || null : null,
+      width: f.size_mode.value === "width" ? lenMm(f.quick_width) || null : null,
     };
   }
   return {
     paper: paperValue(),
     orientation: f.orientation.value,
-    margin: Number(f.margin.value) || 0,
+    margin: lenMm(f.margin) || 0,
     fit: f.fit.checked,
     position: f.position.value,
     width: null,
@@ -591,15 +720,36 @@ for (const name of ADVANCED) {
 
 $("#advanced-auto").addEventListener("click", () => {
   resetAdvanced();
+  saveOptimize();
   if (state.optimized) $("#optimize-form").requestSubmit();
 });
 
 function applyPrepared(result, optimized) {
   Object.assign(state, { current: result.svg, prepared: true, optimized, layers: result.layers });
-  const layerSelect = $("#layer");
-  layerSelect.replaceChildren(new Option("All layers", ""));
-  for (const layer of result.layers) layerSelect.add(new Option(`${layer.id}${layer.name ? ` – ${layer.name}` : ""}`, layer.id));
-  layerSelect.disabled = result.layers.length < 2;
+  $("#layer-list").replaceChildren(...result.layers.map((layer) => {
+    const label = Object.assign(document.createElement("label"), { className: "check" });
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: true, value: layer.id });
+    label.append(box, `${layer.id}${layer.name ? ` – ${layer.name}` : ""}`);
+    return label;
+  }));
+  $("#layer-pick").hidden = result.layers.length < 2;
+  layerSummary();
+}
+
+const layerBoxes = () => $$("#layer-list input");
+
+// The ticked layers, or null when that is all of them.
+function selectedLayers() {
+  const boxes = layerBoxes();
+  const ticked = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+  return ticked.length === boxes.length ? null : ticked;
+}
+
+function layerSummary() {
+  const chosen = selectedLayers();
+  const total = layerBoxes().length;
+  $("#layer-summary").textContent = !chosen ? `All ${total} layers`
+    : !chosen.length ? "No layers ticked" : `${chosen.length} of ${total} layers`;
 }
 
 // Layout preview: the sheet at the chosen size with the drawing placed on it, exactly as it will
@@ -624,7 +774,7 @@ function showMode() {
     if (e.target.name === "size_mode" && f.size_mode.value === "width") {
       // Start from the current width of whatever sizing is measured by.
       const width = f.reference.value === "page" && state.docPageMm ? state.docPageMm[0] : state.layout?.bounds_mm?.[2];
-      if (width) f.quick_width.value = Math.round(width);
+      if (width) setLen(f.quick_width, Math.round(width));
     }
     if (e.target.name === "mode" || e.target.name === "size_mode") showMode();
   });
@@ -657,9 +807,6 @@ function showLayout() {
   drawRulers();
 }
 
-function fmtMm([w, h]) {
-  return `${Math.round(w)} × ${Math.round(h)} mm`;
-}
 
 function layoutInfo() {
   const result = state.layout;
@@ -670,13 +817,13 @@ function layoutInfo() {
   const [pw, ph] = result.page_mm;
   const orientation = pw > ph ? "landscape" : pw < ph ? "portrait" : "square";
   const paperName = prepareMode() === "quick" ? "Plotter reach"
-    : result.options.paper ? $("#paper").selectedOptions[0].textContent.replace("…", "") : "Source page";
-  const rows = [["Paper", `${paperName} ${orientation} · ${fmtMm(result.page_mm)}`]];
+    : result.options.paper ? paperBase($("#paper").value) : "Source page";
+  const rows = [["Paper", `${paperName} ${orientation} · ${fmtSize(result.page_mm)}`]];
   if (result.options.reference === "page" && result.box_mm) {
     const [x, y, w, h] = result.box_mm;
-    rows.push(["Page", `${fmtMm([w, h])} at ${Math.round(x)}, ${Math.round(y)} mm`]);
+    rows.push(["Page", `${fmtSize([w, h])} at ${numIn(x)}, ${numIn(y)} ${unit}`]);
   }
-  if (result.bounds_mm) rows.push(["Lines", fmtMm(result.bounds_mm.slice(2))]);
+  if (result.bounds_mm) rows.push(["Drawing size", fmtSize(result.bounds_mm.slice(2))]);
   kv($("#layout-info"), rows);
 
   const warnings = [];
@@ -691,7 +838,7 @@ function layoutInfo() {
     // the long axis when auto-rotate is on: machine x = page y, machine y = page width - page x.
     const far = settings.auto_rotate && ph > pw ? [b[1] + b[3], pw - b[0]] : [b[0] + b[2], b[1] + b[3]];
     if (far[0] > reach[0] + 0.5 || far[1] > reach[1] + 0.5) {
-      warnings.push(`The drawing goes past what the plotter reaches (${fmtMm(reach)} from the home corner, ` +
+      warnings.push(`The drawing goes past what the plotter reaches (${fmtSize(reach)} from the home corner, ` +
         "the Machine size setting). The part beyond that is clipped.");
     }
   }
@@ -715,7 +862,7 @@ function previewLayout() {
       if (request !== layoutRequest) return; // a newer change is on its way
       applyPrepared(result, false);
       state.layout = { ...result, options };
-      $("#optimize-stats").hidden = true;
+      showStats(result, false);
       if (state.step === "prepare") showLayout();
     } catch (err) {
       if (request === layoutRequest) toast(err.message, true);
@@ -733,6 +880,71 @@ function previewLayout() {
   position.addEventListener("change", () => store.set("pp.position", position.value));
 }
 
+// Every Prepare setting is remembered in this browser. Loading a file still picks what that file
+// needs (its own page when it has a real size, scale to fit when it has none).
+const OPTIMIZE_KEY = "pp.optimize";
+
+function savedOptimize() {
+  try {
+    return JSON.parse(store.get(OPTIMIZE_KEY, "null")) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveOptimize() {
+  const f = $("#optimize-form");
+  const out = {};
+  for (const el of f.elements) {
+    if (!el.name) continue;
+    if (el.type === "radio") {
+      if (el.checked) out[el.name] = el.value;
+    } else if (el.dataset.len !== undefined) out[el.name] = lenMm(el) ?? "";
+    else out[el.name] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  for (const name of ADVANCED) if (f[name].dataset.auto) out[name] = "auto";
+  store.set(OPTIMIZE_KEY, JSON.stringify(out));
+}
+
+// The saved paper, when it is a choice for a file without a size of its own.
+function savedPaper() {
+  const paper = savedOptimize().paper;
+  return paper && paper !== "source" && [...$("#paper").options].some((o) => o.value === paper) ? paper : null;
+}
+
+// names: which fields to restore (all but the paper and the advanced sliders, which need the server's
+// paper list and defaults first).
+function restoreOptimize(names) {
+  const f = $("#optimize-form");
+  const saved = savedOptimize();
+  for (const name of names) {
+    if (!(name in saved)) continue;
+    const field = f.elements[name];
+    if (!field) continue;
+    if (field instanceof RadioNodeList) {
+      for (const radio of field) radio.checked = radio.value === saved[name];
+    } else if (field.type === "checkbox") field.checked = Boolean(saved[name]);
+    else if (ADVANCED.includes(name)) {
+      if (saved[name] !== "auto") field.value = saved[name];
+      showAdvancedValue(field);
+    } else if (field.dataset.len !== undefined) setLen(field, saved[name] === "" ? null : Number(saved[name]));
+    else field.value = saved[name];
+  }
+}
+
+{
+  const f = $("#optimize-form");
+  const later = ["paper", ...ADVANCED];
+  restoreOptimize(Object.keys(savedOptimize()).filter((name) => !later.includes(name)));
+  showMode();
+  syncPenPreset();
+  // Only what you change is saved (not what loading a file picks for it).
+  for (const type of ["input", "change"]) {
+    f.addEventListener(type, (e) => e.isTrusted && e.target.name && saveOptimize());
+  }
+  $("#pen-preset").addEventListener("change", saveOptimize);
+}
+
 $("#optimize-form").addEventListener("input", (e) => {
   if (e.target.name === "paper") $("#custom-size").hidden = e.target.value !== "custom";
   if (LAYOUT_FIELDS.includes(e.target.name)) previewLayout();
@@ -744,25 +956,44 @@ $("#optimize-form").addEventListener("submit", (e) => {
   layoutRequest++;
   const button = $("#optimize-button");
   button.textContent = "Optimizing…";
+  const request = layoutRequest;
   guarded(async () => {
     const options = optimizeOptions();
+    // Always from the file as loaded, never from an earlier result.
     const result = await api("/optimize", { method: "POST", body: { svg: state.original, options } });
+    if (request !== layoutRequest) return; // a newer optimize or layout change is on its way
     applyPrepared(result, true);
     state.layout = { ...result, options };
     showLayout();
-    const { before: b, after: a } = result;
-    const pct = b.travel_mm ? Math.round((100 * (b.travel_mm - a.travel_mm)) / b.travel_mm) : 0;
-    kv($("#optimize-stats"), [
-      ["Lines (pen lifts)", `${b.paths} → ${a.paths}${b.paths ? ` (−${Math.round((100 * (b.paths - a.paths)) / b.paths)}%)` : ""}`],
-      ["Pen-up travel", `${b.travel_mm} → ${a.travel_mm} mm${pct ? ` (${pct > 0 ? "−" : "+"}${Math.abs(pct)}%)` : ""}`],
-      ["Drawing", `${(a.draw_mm / 1000).toFixed(1)} m`],
-      ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
-    ]);
-  }, button).finally(() => (button.textContent = "Optimize"));
+    showStats(result, true);
+  }, button).finally(() => {
+    if (request === layoutRequest) button.textContent = "Optimize";
+  });
 });
 
+// Line counts for the drawing as loaded (laid out, nothing merged or sorted), and once
+// optimized, what optimizing made of it.
+function showStats(result, optimized) {
+  state.lastStats = [result, optimized];
+  const { before: b, after: a } = result;
+  const change = (from, to) => {
+    const pct = from ? Math.round((100 * (from - to)) / from) : 0;
+    return pct ? ` (${pct > 0 ? "−" : "+"}${Math.abs(pct)}%)` : "";
+  };
+  kv($("#optimize-stats"), optimized ? [
+    ["Lines (pen lifts)", `${b.paths} → ${a.paths}${change(b.paths, a.paths)}`],
+    ["Pen-up travel", `${fmtDistance(b.travel_mm)} → ${fmtDistance(a.travel_mm)}${change(b.travel_mm, a.travel_mm)}`],
+    ["Pen-down length", fmtDistance(a.draw_mm, true)],
+    ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
+  ] : [
+    ["Lines (pen lifts)", `${b.paths} (not optimized)`],
+    ["Pen-up travel", fmtDistance(b.travel_mm)],
+    ["Pen-down length", fmtDistance(b.draw_mm, true)],
+    ["Layers", result.layers.map((l) => l.name || l.id).join(", ")],
+  ]);
+}
+
 $("#revert-button").addEventListener("click", () => {
-  $("#optimize-stats").hidden = true;
   Object.assign(state, { optimized: false });
   previewLayout(); // back to the plain layout, unsorted
   updateControls();
@@ -791,41 +1022,52 @@ async function enterPlot() {
     await guarded(async () => applyPrepared(await api("/optimize", { method: "POST", body: { svg: state.current, options: AS_IS } }), false));
   }
   render(state.current, { tracking: true });
-  markSkippedLayers(Number($("#layer").value) || null);
+  markSkippedLayers(selectedLayers());
+  showProgress(state.status);
 }
 
 async function showServerDocument() {
   const doc = await api("/document");
   if (!doc.svg) return;
   render(doc.svg, { tracking: true });
-  markSkippedLayers(doc.layer);
+  markSkippedLayers(doc.layers ?? (doc.layer ? [doc.layer] : null));
   state.completed = 0;
 }
 
-function markSkippedLayers(layer) {
-  if (!layer) return;
+// layers: the layers being plotted (null for all); the rest are dimmed.
+function markSkippedLayers(layers) {
+  if (!layers) return;
+  const keep = new Set(layers.map(Number));
   for (const g of $$("svg > g", canvas)) {
     const label = g.getAttributeNS(INKSCAPE, "label") || "";
-    if (parseInt(label, 10) !== Number(layer)) $$("[id^='pp_']", g).forEach((el) => el.classList.add("skipped"));
+    if (!keep.has(parseInt(label, 10))) $$("[id^='pp_']", g).forEach((el) => el.classList.add("skipped"));
   }
 }
 
-$("#layer").addEventListener("change", () => {
-  if (state.step === "plot" && (!state.status || state.status.state === "idle")) {
+function layersChanged() {
+  layerSummary();
+  if (state.step === "plot" && (!state.status || state.status.state === "idle") && state.current) {
     render(state.current, { tracking: true });
-    markSkippedLayers(Number($("#layer").value) || null);
+    markSkippedLayers(selectedLayers());
+    showProgress(state.status);
   }
   updateControls();
-});
+}
+
+$("#layer-list").addEventListener("change", layersChanged);
+$$("[data-layers]").forEach((button) => button.addEventListener("click", () => {
+  for (const box of layerBoxes()) box.checked = button.dataset.layers === "all";
+  layersChanged();
+}));
 
 $("#plot-button").addEventListener("click", (e) =>
   guarded(async () => {
-    const layer = $("#layer").value;
+    const layers = selectedLayers();
     const s = await api("/plot", {
       method: "POST",
       body: {
         svg: state.current,
-        layer: layer ? Number(layer) : null,
+        ...(layers ? { layers } : {}),
         pen_changes: $("#pen-changes").checked,
         settings: readSettings(),
       },
@@ -872,30 +1114,33 @@ $("#jog-set").addEventListener("click", (e) => drive({ action: "set_start" }, e.
 $("#jog-reach").addEventListener("click", (e) => {
   const at = state.status?.jog;
   if (!at || !(at[0] > 0 && at[1] > 0)) return toast("Drive to the far corner first (both X and Y away from the start).", true);
-  if (!confirm(`Save ${at[0]} × ${at[1]} mm as the furthest the plotter can reach?`)) return;
+  if (!confirm(`Save ${fmtSize(at)} as the furthest the plotter can reach?`)) return;
   guarded(async () => {
     fillSettings(await api("/settings", { method: "POST", body: { reach_x: at[0], reach_y: at[1] } }));
-    toast(`Reach set to ${at[0]} × ${at[1]} mm.`);
+    toast(`Reach set to ${fmtSize(at)}.`);
     if (prepareMode() === "quick") previewLayout();
   }, e.currentTarget);
 });
 
 $("#scale-draw").addEventListener("click", (e) =>
   guarded(async () => {
+    const line = SCALE_LINE_MM[unit];
     await api("/manual", { method: "POST", body: { command: "lower_pen" } });
-    await api("/jog", { method: "POST", body: { dx: 100, dy: 0 } });
+    await api("/jog", { method: "POST", body: { dx: line, dy: 0 } });
     await api("/manual", { method: "POST", body: { command: "raise_pen" } });
-    toast("Drew a 100 mm line. Measure it and enter the length.");
+    state.scaleLineMm = line;
+    toast(`Drew a ${fmtLen(line, unit === "in" ? 0 : 0)} line. Measure it and enter the length.`);
     poll();
   }, e.currentTarget),
 );
 
 $("#scale-apply").addEventListener("click", (e) => {
-  const measured = Number($("#scale-measured").value);
-  if (!(measured > 10)) return toast("Enter the measured length of the 100 mm line, in mm.", true);
+  const line = state.scaleLineMm ?? SCALE_LINE_MM[unit];
+  const measured = lenMm($("#scale-measured"));
+  if (!(measured > line / 4)) return toast(`Enter the measured length of the ${fmtLen(line, 0)} line, in ${unit}.`, true);
   const settings = state.status?.settings ?? state.info.settings;
   const current = settings.steps_per_inch || state.info.default_steps_per_inch;
-  const corrected = Math.round(((current * 100) / measured) * 10) / 10;
+  const corrected = Math.round(((current * line) / measured) * 10) / 10;
   guarded(async () => {
     fillSettings(await api("/settings", { method: "POST", body: { steps_per_inch: corrected } }));
     $("#scale-info").textContent = `Steps per inch ${current} → ${corrected}. Draw another line to check.`;
@@ -935,11 +1180,48 @@ function penHeight(name, value) {
   return PEN_FIELDS.includes(name) && state.info?.pen_reversed ? 100 - value : value;
 }
 
+// Plotter settings are remembered in this browser too, and handed back to the server on connect,
+// so they survive a server restart (or a server without --settings-file). The port belongs to
+// the server's computer, so that one stays on the server.
+const SETTINGS_KEY = "pp.settings";
+let settingsRestored = false; // until then, the server's values aren't this browser's to save
+
+async function restoreSettings() {
+  let settings = state.info.settings;
+  let saved = null;
+  try {
+    saved = JSON.parse(store.get(SETTINGS_KEY, "null"));
+  } catch { /* corrupt: ignore */ }
+  if (saved && typeof saved === "object") {
+    const changed = Object.fromEntries(Object.entries(saved).filter(([k, v]) => k !== "port" && k in settings && settings[k] !== v));
+    try {
+      if (Object.keys(changed).length) {
+        const status = await api("/status");
+        if (status.state !== "idle") {
+          // Mid-plot: only the settings that may change during a plot.
+          const live = new Set(state.info.live_settings ?? []);
+          for (const k of Object.keys(changed)) if (!live.has(k)) delete changed[k];
+        }
+        if (Object.keys(changed).length) settings = await api("/settings", { method: "POST", body: changed });
+      }
+    } catch (err) {
+      toast(`Couldn't restore saved plotter settings: ${err.message}`, true);
+    }
+  }
+  settingsRestored = true;
+  fillSettings(settings);
+}
+
 function fillSettings(settings) {
+  if (settingsRestored) store.set(SETTINGS_KEY, JSON.stringify(settings));
   for (const [key, raw] of Object.entries(settings)) {
     const input = settingsForm.elements[key];
     if (!input || input === document.activeElement) continue;
     // Calibration overrides of 0 mean "use the default": show them blank, with the default as placeholder.
+    if (input.dataset.len !== undefined) {
+      if (lenText(raw || null) !== input.value) setLen(input, raw || null);
+      continue;
+    }
     const value = OVERRIDES.includes(key) && !raw ? "" : penHeight(key, raw);
     if (input.type === "checkbox") input.checked = Boolean(value);
     else if (String(input.value) !== String(value)) input.value = value;
@@ -952,6 +1234,7 @@ function fillSettings(settings) {
 function settingValue(input) {
   if (input.type === "checkbox") return input.checked;
   if (input.type === "text") return input.value;
+  if (input.dataset.len !== undefined) return lenMm(input) ?? 0;
   return penHeight(input.name, Number(input.value)); // mirrored back for the plotter
 }
 
@@ -1008,6 +1291,86 @@ $("#settings-reset").addEventListener("click", () =>
   guarded(async () => fillSettings(await api("/settings", { method: "POST", body: { reset: true } }))),
 );
 
+// ------------------------------------------------------------------ tips
+
+// An "i" after a setting's name: hover for the explanation, click (or tap) to keep it open below.
+const TIPS = {
+  // Prepare
+  reference: "What gets sized and placed. The file's page moves the whole page (blank padding and all), " +
+    "so the drawing keeps its place on it. The lines only uses the outline of the drawing itself.",
+  size_mode: "As drawn keeps the size in the file. Set width scales it to the width you give, keeping its proportions.",
+  quick_width: "How wide the page or the lines (whichever you size by) end up.",
+  quick_offset: "Gap from the plotter's start corner to the drawing, on both the top and left edges.",
+  paper: "The sheet you're plotting on. Keep source page uses the page size in the file.",
+  orientation: "Follow the drawing turns the sheet to match the drawing's shape. Follow the source page matches the file's page.",
+  position: "Where the drawing sits on the sheet. As placed in the file keeps its position from the file.",
+  margin: "Space kept clear around the edge of the sheet when scaling to fit or placing against an edge.",
+  fit: "Scale the drawing up or down to fill the sheet inside the margins.",
+  layers_from: "How the drawing splits into layers, one per pen. Top-level groups uses the file's groups " +
+    "(Inkscape layers). Stroke colour makes one layer per colour.",
+  "#pen-preset": "Fills in the width for a pen you use. Pick Custom to type any width.",
+  pen_width: "Your pen's line width. The preview draws lines this wide, and the Auto merge gap follows it.",
+  merge: "Joins lines whose ends meet (within the merge gap) into one, so the pen draws them without lifting.",
+  sort: "Reorders the lines so the pen travels less in the air between them. Usually the biggest time saver.",
+  two_opt: "Another pass that untangles the travel route. A little less travel, but much slower on big drawings.",
+  reloop: "Closed shapes (circles, outlines) can start anywhere. This picks start points that the sort can " +
+    "link up with less travel.",
+  simplify: "Removes points that barely change a line (within the simplify tolerance), so the plotter makes " +
+    "fewer, smoother moves.",
+  merge_tolerance: "Line ends closer than this get joined. Auto uses your pen width, because gaps narrower " +
+    "than the line don't show.",
+  simplify_tolerance: "How far a simplified line may move from the original. Keep it well under the pen width.",
+  min_length: "Drops lines shorter than this: specks and dots that cost a pen lift each but barely show.",
+  // Plot
+  "#pen-changes": "When plotting all layers, pause before each new layer so you can swap pens, then Resume.",
+  // Plotter settings
+  pen_pos_up: "How high the pen lifts for travel. Just enough to clear the paper is fastest.",
+  pen_pos_down: "How far the pen drops to draw. Lower presses harder.",
+  speed_pendown: "How fast the pen moves while drawing. Slower gives cleaner lines with wet or fine pens.",
+  speed_penup: "How fast the pen moves between lines with the pen up.",
+  accel: "How quickly it speeds up and slows down. Lower is smoother on a wobbly machine; higher is faster.",
+  pen_rate_lower: "How fast the pen drops. Slower stops it bouncing on the paper.",
+  pen_rate_raise: "How fast the pen lifts.",
+  pen_delay_down: "Extra wait after the pen drops before it moves, so the ink starts flowing.",
+  pen_delay_up: "Extra wait after the pen lifts before it moves, so it doesn't drag.",
+  model: "Which machine you have. It sets how far the plotter can reach (unless you set Reach below).",
+  reach_x: "How far the plotter can travel left to right from the start corner. Blank uses the machine size.",
+  reach_y: "How far the plotter can travel top to bottom from the start corner. Blank uses the machine size.",
+  steps_per_inch: "Motor steps per inch of travel. Correct it with Check scale if the test line comes out a different length.",
+  resolution: "High is smoother and more precise. Low moves faster.",
+  const_speed: "Draw at one steady speed instead of speeding up on straight runs. Can look more even with some pens.",
+  auto_rotate: "Plot portrait pages turned sideways, so they run along the plotter's longer axis.",
+  port: "The plotter's serial port. Blank uses the first plotter found.",
+};
+
+for (const [key, text] of Object.entries(TIPS)) {
+  const field = key.startsWith("#") ? $(key) : $(`.panel [name="${key}"]`);
+  const label = field?.closest("label");
+  if (!label) continue;
+  const button = Object.assign(document.createElement("button"), {
+    type: "button", className: "tip", textContent: "i", title: text,
+  });
+  button.setAttribute("aria-label", "About this setting");
+  button.setAttribute("aria-expanded", "false");
+  if (label.classList.contains("check")) label.append(button);
+  else {
+    // Keep the name and its button on one line above the control.
+    const textNode = [...label.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+    const head = Object.assign(document.createElement("span"), { className: "label-head" });
+    label.insertBefore(head, textNode);
+    head.append(textNode.textContent.trim(), button);
+    textNode.remove();
+  }
+  const note = Object.assign(document.createElement("p"), { className: "hint tip-text", textContent: text, hidden: true });
+  if (label.parentElement.classList.contains("pair")) label.append(note);
+  else label.after(note);
+  button.addEventListener("click", (e) => {
+    e.preventDefault();
+    note.hidden = !note.hidden;
+    button.setAttribute("aria-expanded", String(!note.hidden));
+  });
+}
+
 // ------------------------------------------------------------------ status
 
 function fmtTime(seconds) {
@@ -1018,22 +1381,60 @@ function fmtTime(seconds) {
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
+function layerLabel(id, name) {
+  return id == null ? "Ungrouped" : `Layer ${id}${name ? ` – ${name}` : ""}`;
+}
+
+// Progress by work (drawn length plus a per-path overhead), so a few long lines and many short
+// ones both estimate fairly. The rate comes from the whole plot so far, paused time left out.
+// What the progress shows before this page's drawing has been plotted: nothing done yet, out of
+// the paths that will plot (the server's last plot was of something else).
+function notPlotted() {
+  const chosen = selectedLayers();
+  const paths = $$("[id^='pp_']:not(.skipped)", canvas).length;
+  return {
+    state: "idle", paths_total: paths, paths_done: 0, work_total: 0, work_done: 0, elapsed: null,
+    layers: chosen, layer_names: Object.fromEntries(state.layers.map((l) => [l.id, l.name])), layer_progress: null,
+  };
+}
+
+function showProgress(s) {
+  if (!s) return;
+  if (s.state === "idle" && (state.plotId === null || s.plot_id !== state.plotId)) s = notPlotted();
+  const running = s.state === "plotting" || s.state === "paused";
+  const rate = s.work_done > 0 ? s.elapsed / s.work_done : null;
+  const row = (prefix, p, elapsed) => {
+    const fraction = p.work_total ? p.work_done / p.work_total : p.paths_total ? p.paths_done / p.paths_total : 0;
+    $(`#${prefix}-bar`).style.width = `${100 * fraction}%`;
+    $(`#${prefix}-pct`).textContent = p.paths_total ? `${Math.floor(100 * fraction)}%` : "";
+    $(`#${prefix}-count`).textContent = `${p.paths_done || 0} / ${p.paths_total || 0} paths`;
+    let time = elapsed != null ? fmtTime(elapsed) : "";
+    if (running && rate && p.work_done < p.work_total) time += ` · ~${fmtTime(rate * (p.work_total - p.work_done))} left`;
+    $(`#${prefix}-time`).textContent = time;
+  };
+  const chosen = s.layers ?? (s.layer != null ? [s.layer] : null);
+  $("#progress-name").textContent = !chosen ? "Whole plot"
+    : chosen.length === 1 ? layerLabel(chosen[0], s.layer_names?.[chosen[0]]) : `Layers ${chosen.join(", ")}`;
+  row("progress", s, s.elapsed);
+  const lp = s.layer_progress;
+  $("#layer-progress").hidden = !(lp && s.layers_total > 1);
+  if (!$("#layer-progress").hidden) {
+    $("#layer-name").textContent = `${layerLabel(lp.id, lp.name)} · ${lp.number} of ${s.layers_total}`;
+    row("layer", lp, lp.elapsed);
+  }
+}
+
 function applyStatus(s) {
   state.status = s;
   if (s.settings) fillSettings(s.settings);
-  const total = s.paths_total || 0;
-  const done = s.paths_done || 0;
-  $("#progress-bar").style.width = total ? `${(100 * done) / total}%` : "0";
-  $("#progress-count").textContent = `${done} / ${total} paths`;
-  let time = s.elapsed != null ? fmtTime(s.elapsed) : "";
-  if (s.state === "plotting" && done > 0 && done < total) time += ` · ~${fmtTime((s.elapsed / done) * (total - done))} left`;
-  $("#progress-time").textContent = time;
+  showProgress(s);
   const label = $("#plot-state");
   label.textContent = s.preview ? `${s.state} (preview)` : s.state;
   label.className = `state ${s.state}`;
   const jog = s.jog;
   $("#drive-pos").textContent = !jog ? "Position unknown (motors were off): move it to the start and Set start here"
-    : jog[0] || jog[1] ? `X ${jog[0]} mm, Y ${jog[1]} mm from the start corner` : "At the start corner";
+    : jog[0] || jog[1] ? `X ${fmtLen(jog[0], unit === "in" ? 2 : 1)}, Y ${fmtLen(jog[1], unit === "in" ? 2 : 1)} from the start corner`
+      : "At the start corner";
   const penChange = $("#pen-change");
   penChange.hidden = !(s.state === "paused" && s.pen_change);
   if (!penChange.hidden) {
@@ -1069,8 +1470,11 @@ function updateControls() {
   // Paused: Back to start is Home (resume data kept); jogging would lose the resume position.
   if (state.online && s === "paused") $("#jog-back").disabled = false;
   $("#drive-paused").hidden = s !== "paused";
-  $("#layer").disabled = busy || state.layers.length < 2;
-  $("#pen-changes").disabled = busy || state.layers.length < 2 || Boolean($("#layer").value);
+  const chosen = selectedLayers();
+  const count = chosen ? chosen.length : state.layers.length;
+  $$("#layer-pick input, #layer-pick button").forEach((el) => (el.disabled = busy));
+  if (!count) $("#plot-button").disabled = true;
+  $("#pen-changes").disabled = busy || count < 2;
   for (const b of $$("[data-manual]")) {
     b.disabled = !state.online || !(s === "idle" || (s === "paused" && b.dataset.manual !== "disable_xy"));
   }
@@ -1081,7 +1485,7 @@ function updateControls() {
   $("#settings-reset").disabled = busy || !state.online;
   $("#settings-hint").textContent = busy
     ? "Speed and pen changes apply from the next move. Machine size, resolution, rotation and port are locked until the plot ends."
-    : "Changes are saved on the server as you make them.";
+    : "Changes are saved on the server and in this browser as you make them.";
   $("#optimize-button").disabled = !state.original || !state.online;
   $("#revert-button").disabled = !state.optimized;
   $("#download-button").disabled = !state.current;
@@ -1163,17 +1567,21 @@ async function connect() {
     return;
   }
   const paper = $("#paper");
-  const selected = paper.value || state.info.optimize_defaults.paper;
+  const selected = paper.value;
   paper.replaceChildren(
-    ...state.info.paper_sizes.map((p) => new Option(p.toUpperCase(), p)),
+    ...state.info.paper_sizes.map((p) => new Option(paperLabel(p), p)),
     new Option("Custom…", "custom"),
     new Option("Keep source page", "source"),
   );
-  paper.value = selected;
-  fillSettings(state.info.settings);
+  paper.value = selected || savedPaper() || state.info.optimize_defaults.paper;
+  $("#custom-size").hidden = paper.value !== "custom";
+  await restoreSettings();
   overridePlaceholders();
   resetAdvanced();
+  restoreOptimize(ADVANCED);
+  applyUnit();
   poll();
 }
 
+applyUnit();
 connect();

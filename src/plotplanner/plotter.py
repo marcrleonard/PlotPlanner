@@ -42,16 +42,28 @@ class Plotter:
         self._stop = threading.Event()
         self._live: dict = {}  # setting changes waiting for the plot thread to pick up
 
-        self.state = IDLE
+        # Time spent plotting (not paused, homing or stopping): the state setter keeps it.
+        self._active_total = 0.0
+        self._active_since: float | None = None
+        self._state = IDLE
         self.plot_id = 0  # bumps on every new plot so clients know to reload the document
         self.svg: str | None = None  # the document being plotted
         self._resume_svg: str | None = None  # driver output carrying resume data
-        self.layer: int | None = None
+        self.layers: list[int] | None = None  # the layers being plotted; None for all
         self.pen_change: str | None = None  # paused waiting for this layer's pen ("2 waves")
         # Where the carriage is relative to the start corner after jogging, in mm; None once the
         # motors have been off (it may have been moved by hand) until "set start here".
         self.offset: list[float] | None = [0.0, 0.0]
         self.paths_total = 0
+        # Progress by work (drawn length plus a per-path overhead), overall and per layer.
+        self._work: dict[str, tuple[int | None, float]] = {}  # path id -> (layer, work)
+        self.work_total = 0.0
+        self._work_done = 0.0
+        self._layer_totals: dict[int | None, list] = {}  # layer -> [paths, work]
+        self._layer_done: dict[int | None, list] = {}
+        self._layer_names: dict[int, str] = {}
+        self._layer_now: int | None = None  # layer of the path being drawn (or last drawn)
+        self._layer_started = 0.0  # plotting time when that layer's first path started
         self.current_path: str | None = None
         self.completed: list[str] = []
         self._completed_set: set[str] = set()
@@ -59,16 +71,44 @@ class Plotter:
         self.error: str | None = None
         self.messages: deque[str] = deque(maxlen=50)
 
+    @property
+    def state(self) -> str:
+        return self._state
+
+    @state.setter
+    def state(self, new: str) -> None:
+        now = time.time()
+        if self._state == PLOTTING and new != PLOTTING and self._active_since is not None:
+            self._active_total += now - self._active_since
+            self._active_since = None
+        elif new == PLOTTING and self._state != PLOTTING:
+            self._active_since = now
+        self._state = new
+
+    def _plotting_time(self) -> float:
+        """Seconds spent plotting this plot, leaving out pauses (pen changes included)."""
+        running = time.time() - self._active_since if self._active_since is not None else 0.0
+        return self._active_total + running
+
     # ---------------------------------------------------------------- commands
 
-    def plot(self, svg: str, settings: dict | None = None, layer: int | None = None, pen_changes: bool = False) -> None:
-        """pen_changes: when plotting all layers, pause before each layer after the first."""
+    def plot(self, svg: str, settings: dict | None = None, layer: int | None = None, pen_changes: bool = False,
+             layers: list[int] | None = None) -> None:
+        """layers: plot only these layers, one after another (layer: just one). pen_changes: pause
+        before each layer after the first, to swap pens."""
         if self.state != IDLE:
             raise PlotterBusy(f"plotter is {self.state}")
+        if layer is not None:
+            layers = [layer]
+        layers = sorted({int(n) for n in layers}) if layers else None
         if not optimize.is_prepared(svg):
             svg = optimize.optimize(svg, optimize.AS_IS)["svg"]  # numbers the paths; outside the lock
-        if pen_changes and layer is None:
-            svg = optimize.add_pen_changes(svg)
+        if layers is not None and not {lyr["id"] for lyr in optimize.list_layers(svg)} & set(layers):
+            raise ValueError(f"no layer {', '.join(map(str, layers))} in this drawing")
+        # The driver gets only the chosen layers; self.svg keeps the whole drawing for the preview.
+        drive_svg = optimize.keep_layers(svg, layers) if layers is not None else svg
+        if pen_changes and (layers is None or len(layers) > 1):
+            drive_svg = optimize.add_pen_changes(drive_svg)
         with self._lock:
             # Plots start from the start corner: undo any jogging first. (The driver measures from
             # wherever the carriage is, so a jogged carriage would silently move the whole plot.)
@@ -85,14 +125,31 @@ class Plotter:
             self.svg = svg
             self.plot_id += 1
             self._resume_svg = None
-            self.layer = layer
-            self.paths_total = svg.count(f'id="{optimize.PATH_ID_PREFIX}')
+            self.layers = layers
+            work = optimize.path_work(svg)
+            if layers is not None:
+                work = {pid: w for pid, w in work.items() if w[0] in layers}
+            self._work = work
+            self.paths_total = len(work)
+            self.work_total = sum(w for _, w in work.values())
+            self._work_done = 0.0
+            self._layer_totals = {}
+            for lid, w in work.values():
+                totals = self._layer_totals.setdefault(lid, [0, 0.0])
+                totals[0] += 1
+                totals[1] += w
+            self._layer_names = {lyr["id"]: lyr["name"] for lyr in optimize.list_layers(svg)}
+            self._layer_done = {}
+            self._layer_now = None
+            self._layer_started = 0.0
+            self._active_total = 0.0
+            self._active_since = None
             self.current_path = None
             self.completed = []
             self._completed_set = set()
             self.error = None
             self.started_at = time.time()
-            self._start("plot", svg)
+            self._start("plot", drive_svg)
 
     def pause(self) -> None:
         with self._lock:
@@ -227,7 +284,10 @@ class Plotter:
                 "state": self.state,
                 "plot_id": self.plot_id,
                 "preview": self.preview,
-                "layer": self.layer,
+                "layers": self.layers,
+                # The one layer being plotted, when it is just one (older clients read this).
+                "layer": self.layers[0] if self.layers and len(self.layers) == 1 else None,
+                "layer_names": {str(n): self._layer_names.get(n, "") for n in self.layers or []},
                 "pen_change": self.pen_change,
                 "jog": self.offset,
                 "paths_total": self.paths_total,
@@ -235,11 +295,33 @@ class Plotter:
                 "current_path": self.current_path,
                 "completed_since": since,
                 "completed": self.completed[since:],
-                "elapsed": round(time.time() - self.started_at, 1) if self.started_at else None,
+                "elapsed": round(self._plotting_time(), 1) if self.started_at else None,
+                "work_total": round(self.work_total, 1),
+                "work_done": round(self._work_done, 1),
+                "layers_total": len(self._layer_totals),
+                "layer_progress": self._layer_progress(),
                 "error": self.error,
                 "messages": list(self.messages)[-10:],
                 "settings": dict(self.settings),
             }
+
+    def _layer_progress(self) -> dict | None:
+        """Progress through the layer being drawn (or the one just finished)."""
+        lid = self._layer_now
+        if lid not in self._layer_totals:
+            return None
+        paths, work = self._layer_totals[lid]
+        done_paths, done_work = self._layer_done.get(lid, [0, 0.0])
+        return {
+            "id": lid,
+            "name": self._layer_names.get(lid, ""),
+            "number": list(self._layer_totals).index(lid) + 1,  # nth layer of this plot
+            "paths_total": paths,
+            "paths_done": done_paths,
+            "work_total": round(work, 1),
+            "work_done": round(done_work, 1),
+            "elapsed": round(self._plotting_time() - self._layer_started, 1),
+        }
 
     def connection(self) -> dict:
         with self._lock:
@@ -311,7 +393,7 @@ class Plotter:
             take_live_settings=self._take_live_settings,
             message=self._message,
         )
-        ad.configure(svg, self.settings, mode=mode, layer=self.layer, preview=self.preview)
+        ad.configure(svg, self.settings, mode=mode, preview=self.preview)
         handler = _MessageHandler(self._message)
         for name in DRIVER_LOGGERS:
             logging.getLogger(name).addHandler(handler)
@@ -334,12 +416,22 @@ class Plotter:
     def _path_start(self, path_id: str | None) -> None:
         with self._lock:
             self.current_path = path_id
+            if path_id in self._work:
+                lid = self._work[path_id][0]
+                if lid != self._layer_now:
+                    self._layer_now = lid
+                    self._layer_started = self._plotting_time()
 
     def _path_done(self, path_id: str | None) -> None:
         with self._lock:
             if path_id and path_id not in self._completed_set:
                 self._completed_set.add(path_id)
                 self.completed.append(path_id)
+                lid, work = self._work.get(path_id, (None, 0.0))
+                self._work_done += work
+                done = self._layer_done.setdefault(lid, [0, 0.0])
+                done[0] += 1
+                done[1] += work
 
     def _message(self, message) -> None:
         text = str(message).strip()

@@ -89,11 +89,12 @@ def optimize(source, output, **kwargs):
 @cli.command()
 @click.argument("source", type=click.File("r"))
 @click.option("--as-is", is_flag=True, help="Plot without optimizing.")
-@click.option("--layer", type=int, help="Plot only this layer.")
+@click.option("--layer", "layers", type=int, multiple=True,
+              help="Plot only this layer. Repeat it to plot several, one after another.")
 @click.option("--pen-changes", is_flag=True, help="Pause before each layer after the first to swap pens.")
 @click.option("--preview", is_flag=True, help="Simulate without a plotter.")
 @optimize_options
-def plot(source, as_is, layer, pen_changes, preview, **kwargs):
+def plot(source, as_is, layers, pen_changes, preview, **kwargs):
     """Plot an SVG. Ctrl-C pauses; Ctrl-C again stops and returns home."""
     from .server import load_settings
 
@@ -102,7 +103,7 @@ def plot(source, as_is, layer, pen_changes, preview, **kwargs):
     _report(result)
 
     plotter = Plotter(settings=load_settings(), preview=preview)
-    plotter.plot(result["svg"], layer=layer, pen_changes=pen_changes)
+    plotter.plot(result["svg"], layers=list(layers) or None, pen_changes=pen_changes)
     shown = None
     while True:
         try:

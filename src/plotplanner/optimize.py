@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 
 import vpype as vp
@@ -14,7 +15,9 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 NSMAP = {"svg": SVG_NS, "inkscape": INKSCAPE_NS}
 
 PATH_ID_PREFIX = "pp_"
-PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid"]
+# Named sizes, then common inch sizes (art paper, photo and frame sizes) as "WxHin".
+PAPER_SIZES = ["a6", "a5", "a4", "a3", "a2", "letter", "legal", "tabloid",
+               "4x6in", "5x7in", "8x10in", "9x12in", "11x14in", "12x16in", "18x24in"]
 ORIENTATIONS = ["auto", "source", "portrait", "landscape"]
 # Where the drawing sits on the sheet. "keep" leaves it where it is relative to the page's top-left
 # corner; the rest anchor it that far in from the edges by the margin.
@@ -79,16 +82,22 @@ def _stats(doc: vp.Document) -> dict:
 
 
 def _paper_size(paper: str) -> tuple[float, float]:
-    """Paper size in px, portrait."""
+    """Paper size in px, portrait. A name, or "WxHmm" / "WxHin"."""
     paper = paper.strip().lower()
     if paper in vp.PAGE_SIZES:
         w, h = vp.PAGE_SIZES[paper]
     else:
+        per = 25.4 * PX_PER_MM if paper.endswith("in") else PX_PER_MM
         try:
-            w, h = (float(v) * PX_PER_MM for v in paper.removesuffix("mm").split("x"))
+            w, h = (float(v) * per for v in paper.removesuffix("in").removesuffix("mm").split("x"))
         except ValueError:
-            raise ValueError(f"unknown paper size {paper!r}; use {PAPER_SIZES} or WxH in mm") from None
+            raise ValueError(f"unknown paper size {paper!r}; use {PAPER_SIZES}, WxHmm or WxHin") from None
     return min(w, h), max(w, h)
+
+
+def paper_sizes_mm() -> dict[str, list[float]]:
+    """Each named paper size, portrait, in mm."""
+    return {name: [round(v / PX_PER_MM, 1) for v in _paper_size(name)] for name in PAPER_SIZES}
 
 
 def _arrange(opts: OptimizeOptions, doc: vp.Document) -> list[float] | None:
@@ -239,6 +248,18 @@ def add_pen_changes(svg: str) -> str:
     return etree.tostring(root, encoding="unicode")
 
 
+def keep_layers(svg: str, layers: list[int]) -> str:
+    """Only the given numbered layers, in their document order (path ids unchanged). Pen-change
+    layers go too: add_pen_changes puts them back between the layers that are left."""
+    keep = set(layers)
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    for g in list(root.iterfind("svg:g[@inkscape:groupmode='layer']", NSMAP)):
+        number = g.get(f"{{{INKSCAPE_NS}}}label", "").partition(" ")[0]
+        if not (number.isdigit() and int(number) in keep):
+            g.getparent().remove(g)
+    return etree.tostring(root, encoding="unicode")
+
+
 def label_and_number(svg: str, layer_names: dict[int, str] | None = None) -> tuple[str, int]:
     """Give every path a sequential id (pp_1, pp_2, ...) in document order, which is also plot
     order, and name layers "<n> <name>" so the plotter's layer mode can select them.
@@ -316,6 +337,37 @@ AS_IS = OptimizeOptions(paper=None, fit=False, merge=False, sort=False, reloop=F
 
 def is_prepared(svg: str) -> bool:
     return f'id="{PATH_ID_PREFIX}1"' in svg
+
+
+# Rough plotting cost of one pen lift and the travel to the next path, as drawn length (px). It
+# keeps a drawing of many short strokes from looking almost free next to a few long ones.
+PATH_OVERHEAD_PX = 10 * PX_PER_MM
+_NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+
+
+def _drawn_length(d: str) -> float:
+    """Length of a prepared path's outline (absolute M/L points; curves count their control
+    polygon). Used for relative work only, so the units and any group transform don't matter."""
+    numbers = [float(n) for n in _NUMBER.findall(d)]
+    points = list(zip(numbers[0::2], numbers[1::2]))
+    return sum(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5 for (x1, y1), (x2, y2) in zip(points, points[1:]))
+
+
+def path_work(svg: str) -> dict[str, tuple[int | None, float]]:
+    """{path id: (layer number or None, work)} for every numbered path, in plot order. Work is
+    drawn length plus a fixed per-path overhead, for progress and time estimates."""
+    root = etree.fromstring(svg.encode("utf-8"), parser=etree.XMLParser(huge_tree=True))
+    layer_of = {}
+    for g in root.iterfind("svg:g[@inkscape:groupmode='layer']", NSMAP):
+        number = g.get(f"{{{INKSCAPE_NS}}}label", "").partition(" ")[0]
+        for el in g.iter(f"{{{SVG_NS}}}path"):
+            layer_of[el] = int(number) if number.isdigit() else None
+    work = {}
+    for el in root.iter(f"{{{SVG_NS}}}path"):
+        pid = el.get("id", "")
+        if pid.startswith(PATH_ID_PREFIX):
+            work[pid] = (layer_of.get(el), _drawn_length(el.get("d", "")) + PATH_OVERHEAD_PX)
+    return work
 
 
 def list_layers(svg: str) -> list[dict]:
